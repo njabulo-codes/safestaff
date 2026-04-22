@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SafeStaff — OHS Personnel & Training Manager</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700;800&display=swap');
+  :root{
+    --bg:#0d0f14;--surface:#151820;--surface2:#1c2030;--border:#252a3a;
+    --accent:#e8f04a;--text:#e8eaf2;--text-dim:#7a8099;--text-muted:#3d4460;
+    --red:#f04a7a;--green:#4af0a0;--yellow:#f0c44a;--blue:#4ab4f0;--purple:#c44af0;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+  /* ── LOGIN ── */
+  .login-screen{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:200;}
+  .login-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;width:380px;max-width:95vw;}
+  .login-logo{display:flex;align-items:center;gap:12px;margin-bottom:32px;}
+  .login-shield{width:44px;height:44px;background:var(--accent);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+  .login-title{font-family:'DM Serif Display',serif;font-size:24px;}
+  .login-sub{font-size:11px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;}
+  .login-field{margin-bottom:16px;}
+  .login-label{font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:6px;letter-spacing:.5px;}
+  .login-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'Syne',sans-serif;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;}
+  .login-input:focus{border-color:var(--accent);}
+  .login-btn{width:100%;background:var(--accent);color:#0d0f14;border:none;border-radius:8px;padding:12px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;transition:background .15s;}
+  .login-btn:hover{background:#d4da2e;}
+  .login-err{background:rgba(240,74,122,.1);border:1px solid rgba(240,74,122,.2);color:var(--red);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px;display:none;}
+
+  /* ── APP LAYOUT ── */
+  .app{display:flex;height:100vh;}
+  .sidebar{width:240px;min-width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:10;}
+  .sidebar-logo{padding:24px 24px 18px;border-bottom:1px solid var(--border);}
+  .logo-icon{display:flex;align-items:center;gap:10px;}
+  .logo-shield{width:34px;height:34px;background:var(--accent);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+  .logo-text{font-family:'DM Serif Display',serif;font-size:20px;}
+  .logo-sub{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+  .sidebar-nav{padding:16px 12px;flex:1;overflow-y:auto;}
+  .nav-section-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);padding:8px 12px 6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:all .15s;font-size:13px;font-weight:500;color:var(--text-dim);margin-bottom:2px;border:1px solid transparent;}
+  .nav-item:hover{background:var(--surface2);color:var(--text);}
+  .nav-item.active{background:rgba(232,240,74,.08);color:var(--accent);border-color:rgba(232,240,74,.15);}
+  .nav-icon{font-size:15px;width:20px;text-align:center;}
+  .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:9px;font-weight:700;font-family:'IBM Plex Mono',monospace;padding:2px 6px;border-radius:10px;}
+  .nav-item.admin-only{display:none;}
+  .is-admin .nav-item.admin-only{display:flex;}
+  .sidebar-footer{padding:14px 16px;border-top:1px solid var(--border);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);}
+  .user-pill{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:8px;}
+  .user-avatar-sm{width:26px;height:26px;border-radius:6px;background:rgba(232,240,74,.15);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;}
+  .user-name-sm{font-size:11px;font-weight:600;flex:1;}
+  .user-role-sm{font-size:9px;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;}
+  .logout-btn{cursor:pointer;color:var(--red);font-size:10px;padding:4px 4px;}
+
+  /* ── MAIN ── */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:16px;height:60px;flex-shrink:0;}
+  .topbar-title{font-size:15px;font-weight:700;flex:1;}
+  .topbar-title span{color:var(--text-dim);font-weight:400;margin-left:8px;font-size:13px;}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;border:none;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.3px;}
+  .btn-primary{background:var(--accent);color:#0d0f14;}
+  .btn-primary:hover{background:#d4da2e;transform:translateY(-1px);}
+  .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--border);}
+  .btn-ghost:hover{color:var(--text);border-color:var(--text-dim);}
+  .btn-danger{background:rgba(240,74,122,.1);color:var(--red);border:1px solid rgba(240,74,122,.2);}
+  .btn-danger:hover{background:rgba(240,74,122,.2);}
+  .btn-warning{background:rgba(240,196,74,.1);color:var(--yellow);border:1px solid rgba(240,196,74,.2);}
+  .btn-warning:hover{background:rgba(240,196,74,.2);}
+  .search-bar{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;}
+  .search-bar input{background:none;border:none;outline:none;font-family:'Syne',sans-serif;font-size:12px;color:var(--text);width:200px;}
+  .search-bar input::placeholder{color:var(--text-muted);}
+  .content{flex:1;overflow-y:auto;padding:24px 28px;}
+
+  /* ── STATS ── */
+  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:border-color .2s;}
+  .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--card-accent,var(--accent));}
+  .stat-card:hover{border-color:var(--card-accent,var(--accent));}
+  .stat-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);}
+  .stat-value{font-size:32px;font-weight:800;margin:8px 0 4px;line-height:1;}
+  .stat-sub{font-size:11px;color:var(--text-dim);}
+  .stat-icon{position:absolute;right:16px;top:16px;font-size:24px;opacity:.15;}
+
+  /* ── TABLES ── */
+  .section-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+  .section-title{font-size:15px;font-weight:700;}
+  .section-count{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);background:var(--surface2);padding:3px 8px;border-radius:20px;border:1px solid var(--border);}
+  .filter-tabs{display:flex;gap:4px;margin-left:auto;}
+  .filter-tab{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-family:'Syne',sans-serif;transition:all .15s;}
+  .filter-tab.active{background:var(--surface2);color:var(--text);border-color:var(--text-dim);}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .table-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{background:var(--surface2);font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);padding:10px 16px;text-align:left;border-bottom:1px solid var(--border);font-weight:500;}
+  tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
+  tbody tr:last-child{border-bottom:none;}
+  tbody tr:hover{background:var(--surface2);}
+  tbody td{padding:12px 16px;font-size:12px;}
+
+  /* ── COMPONENTS ── */
+  .avatar{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;font-family:'DM Serif Display',serif;}
+  .staff-cell{display:flex;align-items:center;gap:10px;}
+  .staff-name{font-weight:600;font-size:13px;}
+  .staff-id{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;letter-spacing:.5px;}
+  .badge-green{background:rgba(74,240,160,.1);color:var(--green);border:1px solid rgba(74,240,160,.2);}
+  .badge-red{background:rgba(240,74,122,.1);color:var(--red);border:1px solid rgba(240,74,122,.2);}
+  .badge-yellow{background:rgba(240,196,74,.1);color:var(--yellow);border:1px solid rgba(240,196,74,.2);}
+  .badge-blue{background:rgba(74,180,240,.1);color:var(--blue);border:1px solid rgba(74,180,240,.2);}
+  .badge-purple{background:rgba(196,74,240,.1);color:var(--purple);border:1px solid rgba(196,74,240,.2);}
+  .badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor;}
+  .progress-bar-wrap{width:80px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .progress-bar-fill{height:100%;border-radius:3px;transition:width .3s;}
+  .actions-cell{display:flex;gap:6px;}
+  .icon-btn{width:28px;height:28px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:all .15s;color:var(--text-dim);}
+  .icon-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .icon-btn.danger:hover{border-color:var(--red);color:var(--red);}
+  .icon-btn.warning:hover{border-color:var(--yellow);color:var(--yellow);}
+
+  /* ── SPINNER ── */
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-row td{text-align:center;padding:40px;color:var(--text-muted);}
+
+  /* ── MODAL ── */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:640px;max-width:95vw;max-height:88vh;overflow-y:auto;animation:slideUp .2s ease;}
+  @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .modal-header{padding:24px 28px 16px;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border);}
+  .modal-title{font-size:17px;font-weight:700;}
+  .modal-sub{font-size:12px;color:var(--text-dim);margin-top:3px;}
+  .modal-close{width:32px;height:32px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--text-dim);transition:all .15s;}
+  .modal-close:hover{border-color:var(--red);color:var(--red);}
+  .modal-body{padding:24px 28px;}
+  .modal-footer{padding:16px 28px 24px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);}
+
+  /* ── FORMS ── */
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .form-grid.full{grid-template-columns:1fr;}
+  .form-group{display:flex;flex-direction:column;gap:6px;}
+  .form-group.span2{grid-column:span 2;}
+  .form-label{font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.5px;}
+  .form-input,.form-select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:'Syne',sans-serif;font-size:12px;color:var(--text);outline:none;transition:border-color .15s;width:100%;appearance:none;}
+  .form-input:focus,.form-select:focus{border-color:var(--accent);}
+  .form-input::placeholder{color:var(--text-muted);}
+  .form-section-title{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);padding-top:8px;border-top:1px solid var(--border);margin-top:4px;}
+
+  /* ── DETAIL MODAL ── */
+  .detail-modal{width:800px;}
+  .detail-header-row{display:flex;align-items:flex-start;gap:16px;margin-bottom:20px;}
+  .detail-avatar-lg{width:64px;height:64px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;font-family:'DM Serif Display',serif;flex-shrink:0;}
+  .detail-name{font-size:20px;font-weight:800;}
+  .detail-meta{font-size:12px;color:var(--text-dim);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .detail-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;}
+  .detail-tab{padding:10px 18px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-dim);transition:all .15s;margin-bottom:-1px;white-space:nowrap;}
+  .detail-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .info-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;}
+  .info-value{font-size:13px;font-weight:500;}
+  .training-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:8px;}
+  .training-icon{font-size:20px;flex-shrink:0;}
+  .training-name{font-size:13px;font-weight:600;}
+  .training-meta{font-size:11px;color:var(--text-dim);margin-top:2px;}
+  .training-status{margin-left:auto;text-align:right;}
+  .training-expiry{font-size:10px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;margin-top:3px;}
+
+  /* ── OFFBOARDING ── */
+  .offboard-warning{background:rgba(240,74,122,.08);border:1px solid rgba(240,74,122,.2);border-radius:10px;padding:16px;margin-bottom:16px;}
+  .offboard-warning-title{font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px;}
+  .offboard-warning-text{font-size:12px;color:var(--text-dim);line-height:1.6;}
+  .offboard-checklist{margin-top:12px;display:flex;flex-direction:column;gap:8px;}
+  .offboard-check{display:flex;align-items:center;gap:10px;font-size:12px;}
+  .offboard-check input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);}
+
+  /* ── ALERTS ── */
+  .alerts-wrap{display:flex;flex-direction:column;gap:8px;}
+  .alert-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px;border-left:3px solid var(--alert-color,var(--border));}
+  .alert-icon{font-size:18px;flex-shrink:0;}
+  .alert-text{flex:1;}
+  .alert-title{font-size:13px;font-weight:600;}
+  .alert-sub{font-size:11px;color:var(--text-dim);margin-top:2px;}
+  .alert-date{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);white-space:nowrap;}
+
+  /* ── MATRIX ── */
+  .matrix-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .matrix-header{background:var(--surface2);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+  .comp-row{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;}
+  .comp-row:last-child{border-bottom:none;}
+  .comp-name{font-size:12px;font-weight:600;}
+  .comp-cat{font-size:10px;color:var(--text-dim);margin-top:2px;}
+  .comp-dot{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;cursor:default;}
+  .comp-dot.certified{background:rgba(74,240,160,.2);color:var(--green);}
+  .comp-dot.expired{background:rgba(240,74,122,.2);color:var(--red);}
+  .comp-dot.pending{background:rgba(240,196,74,.2);color:var(--yellow);}
+  .comp-dot.none{background:var(--surface2);color:var(--text-muted);}
+
+  /* ── DEPT CARDS ── */
+  .dept-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .dept-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:border-color .2s;}
+  .dept-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--card-accent);}
+  .dept-card:hover{border-color:var(--card-accent);}
+  .dept-card-name{font-size:16px;font-weight:800;margin-bottom:8px;}
+  .dept-card-meta{font-size:11px;color:var(--text-dim);display:flex;flex-direction:column;gap:4px;}
+  .dept-card-count{font-size:28px;font-weight:800;margin:10px 0 4px;}
+
+  /* ── ADMIN PANEL ── */
+  .admin-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .admin-section-title{font-size:14px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+  .admin-section-title span{font-size:18px;}
+
+  /* ── TOAST ── */
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:10px;font-size:13px;z-index:999;min-width:240px;box-shadow:0 8px 32px rgba(0,0,0,.4);transform:translateX(320px);transition:transform .3s;}
+  .toast.show{transform:translateX(0);}
+
+  /* ── VIEWS ── */
+  .view{display:none;}
+  .view.active{display:block;}
+  .empty-state{text-align:center;padding:60px 20px;color:var(--text-dim);}
+  .empty-icon{font-size:48px;margin-bottom:12px;opacity:.5;}
+  .empty-title{font-size:15px;font-weight:700;margin-bottom:6px;}
+  .empty-sub{font-size:12px;}
+  .sync-indicator{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:6px;}
+  .sync-dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+  .sync-dot.syncing{background:var(--yellow);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+
+<!-- ══ LOGIN SCREEN ════════════════════════════════════════════ -->
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-shield">🛡</div>
+      <div><div class="login-title">SafeStaff</div><div class="login-sub">OHS Personnel Manager</div></div>
+    </div>
+    <div class="login-err" id="login-err"></div>
+    <div class="login-field"><label class="login-label">Email Address</label><input class="login-input" id="login-email" type="email" placeholder="you@company.com" autocomplete="email"></div>
+    <div class="login-field"><label class="login-label">Password</label><input class="login-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">First time? Ask your administrator to create your account.</div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ════════════════════════════════════════════════ -->
+<div class="app" id="main-app" style="display:none">
+  <aside class="sidebar" id="sidebar-root">
+    <div class="sidebar-logo">
+      <div class="logo-icon">
+        <div class="logo-shield">🛡</div>
+        <div><div class="logo-text">SafeStaff</div><div class="logo-sub">OHS Manager</div></div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Overview</div>
+      <div class="nav-item active" onclick="switchView('dashboard',this)"><span class="nav-icon">⬡</span> Dashboard</div>
+      <div class="nav-section-label">Personnel</div>
+      <div class="nav-item" onclick="switchView('staff',this)"><span class="nav-icon">👥</span> Staff Directory</div>
+      <div class="nav-item" onclick="switchView('departments',this)"><span class="nav-icon">🏢</span> Departments</div>
+      <div class="nav-section-label">Training & OHS</div>
+      <div class="nav-item" onclick="switchView('training',this)"><span class="nav-icon">🎓</span> Training Records</div>
+      <div class="nav-item" onclick="switchView('competencies',this)"><span class="nav-icon">✅</span> Competencies</div>
+      <div class="nav-item" onclick="switchView('medicals',this)"><span class="nav-icon">🏥</span> Medical Records <span class="nav-badge" id="med-badge" style="display:none">!</span></div>
+      <div class="nav-item" onclick="switchView('alerts',this)"><span class="nav-icon">🔔</span> Alerts <span class="nav-badge" id="alert-badge" style="display:none">!</span></div>
+      <div class="nav-section-label">Reports</div>
+      <div class="nav-item" onclick="switchView('matrix',this)"><span class="nav-icon">⬛</span> Skills Matrix</div>
+      <div class="nav-section-label">Administration</div>
+      <div class="nav-item admin-only" onclick="switchView('admin',this)"><span class="nav-icon">⚙️</span> Admin Panel</div>
+      <div class="nav-item admin-only" onclick="switchView('offboarding',this)"><span class="nav-icon">🚪</span> Staff Offboarding</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-pill">
+        <div class="user-avatar-sm" id="user-avatar">?</div>
+        <div><div class="user-name-sm" id="user-name">…</div><div class="user-role-sm" id="user-role">…</div></div>
+      </div>
+      <div class="sync-indicator"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Connected</span></div>
+      <div class="logout-btn" onclick="doLogout()">⏻ Sign out</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard <span>Overview</span></div>
+      <div class="search-bar"><span>🔍</span><input type="text" placeholder="Search staff, training…" id="global-search" oninput="handleSearch(this.value)"></div>
+      <button class="btn btn-primary" id="topbar-cta" onclick="handleCTA()">＋ Add Staff</button>
+    </div>
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <div class="view active" id="view-dashboard">
+        <div class="stats-row">
+          <div class="stat-card" style="--card-accent:#e8f04a"><div class="stat-label">Total Staff</div><div class="stat-value" id="stat-total">—</div><div class="stat-sub">Active employees</div><div class="stat-icon">👥</div></div>
+          <div class="stat-card" style="--card-accent:#4af0a0"><div class="stat-label">Training Current</div><div class="stat-value" id="stat-current">—</div><div class="stat-sub">No issues</div><div class="stat-icon">✅</div></div>
+          <div class="stat-card" style="--card-accent:#f0c44a"><div class="stat-label">Expiring (90 days)</div><div class="stat-value" id="stat-expiring">—</div><div class="stat-sub">Training or medical</div><div class="stat-icon">⏳</div></div>
+          <div class="stat-card" style="--card-accent:#f04a7a"><div class="stat-label">Action Required</div><div class="stat-value" id="stat-overdue">—</div><div class="stat-sub">Expired or missing</div><div class="stat-icon">🚨</div></div>
+        </div>
+        <div class="section-header"><div class="section-title">Recent Activity</div></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Staff Member</th><th>Action</th><th>Details</th><th>Date</th></tr></thead>
+          <tbody id="activity-tbody"><tr class="loading-row"><td colspan="4"><span class="spinner"></span> Loading…</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- STAFF DIRECTORY -->
+      <div class="view" id="view-staff">
+        <div class="section-header">
+          <div class="section-title">Staff Directory</div>
+          <div class="section-count" id="staff-count-lbl">—</div>
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterStaff('all',this)">All</button>
+            <button class="filter-tab" onclick="filterStaff('active',this)">Active</button>
+            <button class="filter-tab" onclick="filterStaff('inactive',this)">Inactive</button>
+          </div>
+          <button class="btn btn-primary" style="margin-left:8px" onclick="openAddStaff()">＋ Add Staff</button>
+        </div>
+        <div class="table-wrap table-scroll"><table>
+          <thead><tr><th>Employee</th><th>Department</th><th>Role</th><th>Type</th><th>Uniform</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="staff-tbody"><tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- DEPARTMENTS -->
+      <div class="view" id="view-departments">
+        <div class="section-header"><div class="section-title">Departments</div><button class="btn btn-ghost admin-only" style="margin-left:auto" onclick="openAddDept()">＋ Add Department</button></div>
+        <div class="dept-grid" id="dept-cards"></div>
+      </div>
+
+      <!-- TRAINING RECORDS -->
+      <div class="view" id="view-training">
+        <div class="section-header">
+          <div class="section-title">Training Records</div>
+          <div class="section-count" id="training-count-lbl">—</div>
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterTraining('all',this)">All</button>
+            <button class="filter-tab" onclick="filterTraining('current',this)">Current</button>
+            <button class="filter-tab" onclick="filterTraining('expiring',this)">Expiring</button>
+            <button class="filter-tab" onclick="filterTraining('expired',this)">Expired</button>
+          </div>
+          <button class="btn btn-primary" style="margin-left:8px" onclick="openAddTraining()">＋ Log Training</button>
+        </div>
+        <div class="table-wrap table-scroll"><table>
+          <thead><tr><th>Staff Member</th><th>Competency</th><th>Category</th><th>Completed</th><th>Expires</th><th>Provider</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="training-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <!-- COMPETENCIES -->
+      <div class="view" id="view-competencies">
+        <div class="section-header"><div class="section-title">OHS Competency Framework</div><button class="btn btn-ghost admin-only" style="margin-left:auto" onclick="openAddComp()">＋ Add Competency</button></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Competency</th><th>Category</th><th>Mandatory</th><th>Validity</th><th>Renewal</th><th>Actions</th></tr></thead>
+          <tbody id="comp-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <!-- MEDICAL RECORDS -->
+      <div class="view" id="view-medicals">
+        <div class="section-header">
+          <div class="section-title">Medical Records</div>
+          <div class="section-count" id="med-count-lbl">—</div>
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterMedicals('all',this)">All</button>
+            <button class="filter-tab" onclick="filterMedicals('current',this)">Current</button>
+            <button class="filter-tab" onclick="filterMedicals('expiring',this)">Expiring</button>
+            <button class="filter-tab" onclick="filterMedicals('expired',this)">Expired</button>
+            <button class="filter-tab" onclick="filterMedicals('unrecorded',this)">Not Recorded</button>
+          </div>
+          <button class="btn btn-primary" style="margin-left:8px" onclick="openAddMedical(null)">＋ Log Medical</button>
+        </div>
+        <div class="table-wrap table-scroll"><table>
+          <thead><tr><th>Staff Member</th><th>Exam Type</th><th>Doctor / Clinic</th><th>Exam Date</th><th>Expires</th><th>Cert No.</th><th>Outcome</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="med-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <!-- ALERTS -->
+      <div class="view" id="view-alerts">
+        <div class="section-header"><div class="section-title">Compliance Alerts</div><div class="section-count" id="alert-count-lbl">—</div></div>
+        <div class="alerts-wrap" id="alerts-list"></div>
+      </div>
+
+      <!-- SKILLS MATRIX -->
+      <div class="view" id="view-matrix">
+        <div class="section-header"><div class="section-title">OHS Skills Matrix</div></div>
+        <div class="matrix-wrap">
+          <div class="matrix-header">
+            <div style="font-size:14px;font-weight:700">Competency × Staff Grid</div>
+            <div style="display:flex;gap:12px;font-size:11px;color:var(--text-dim)">
+              <span><span style="color:var(--green)">●</span> Certified</span>
+              <span><span style="color:var(--yellow)">●</span> Expiring</span>
+              <span><span style="color:var(--red)">●</span> Expired</span>
+              <span><span style="color:var(--text-muted)">●</span> None</span>
+            </div>
+          </div>
+          <div id="matrix-content" style="overflow-x:auto"></div>
+        </div>
+      </div>
+
+      <!-- ADMIN PANEL -->
+      <div class="view" id="view-admin">
+        <div class="admin-section">
+          <div class="admin-section-title"><span>👤</span> User Management</div>
+          <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openAddUser()">＋ Create User Account</button></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="users-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="admin-section">
+          <div class="admin-section-title"><span>➕</span> Add New Staff Member</div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px">Use this to onboard new employees. Their details will be saved to the database immediately.</p>
+          <button class="btn btn-primary" onclick="openAddStaff()">＋ Add Staff Member</button>
+        </div>
+        <div class="admin-section">
+          <div class="admin-section-title"><span>🗄️</span> Database Info</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" id="db-stats"></div>
+        </div>
+      </div>
+
+      <!-- OFFBOARDING -->
+      <div class="view" id="view-offboarding">
+        <div class="section-header"><div class="section-title">Staff Offboarding</div><div class="section-count" id="inactive-count-lbl">—</div></div>
+        <div style="background:rgba(240,196,74,.06);border:1px solid rgba(240,196,74,.2);border-radius:10px;padding:16px;margin-bottom:20px;font-size:12px;color:var(--text-dim);line-height:1.7">
+          ⚠️ <strong style="color:var(--yellow)">Offboarding Process:</strong> When a staff member leaves, use this panel to deactivate their profile. Their OHS records are <strong style="color:var(--text)">retained for audit and compliance purposes</strong> but they will no longer appear in active compliance checks or alerts. A permanent deletion removes all records.
+        </div>
+        <div class="table-wrap table-scroll"><table>
+          <thead><tr><th>Employee</th><th>Department</th><th>Role</th><th>Last Active</th><th>Reason</th><th>Actions</th></tr></thead>
+          <tbody id="offboard-tbody"></tbody>
+        </table></div>
+        <div style="margin-top:24px">
+          <div class="section-header"><div class="section-title" style="font-size:13px">Recently Offboarded Staff</div></div>
+          <div class="table-wrap table-scroll"><table>
+            <thead><tr><th>Employee</th><th>Department</th><th>Offboard Date</th><th>Reason</th><th>Records</th><th>Actions</th></tr></thead>
+            <tbody id="offboarded-tbody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODALS ════════════════════════════════════════════════ -->
+
+<!-- EDIT STAFF -->
+<div class="modal-overlay" id="modal-edit-staff">
+  <div class="modal"><div class="modal-header"><div><div class="modal-title">Edit Staff Member</div><div class="modal-sub" id="edit-staff-sub">Update employee details</div></div><div class="modal-close" onclick="closeModal('modal-edit-staff')">✕</div></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group"><label class="form-label">First Name *</label><input class="form-input" id="es-fname"></div>
+    <div class="form-group"><label class="form-label">Last Name *</label><input class="form-input" id="es-lname"></div>
+    <div class="form-group"><label class="form-label">Employee ID</label><input class="form-input" id="es-eid" disabled style="opacity:.5;cursor:not-allowed" title="Employee ID cannot be changed"></div>
+    <div class="form-group"><label class="form-label">Date of Birth</label><input class="form-input" id="es-dob" type="date"></div>
+    <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="es-email" type="email"></div>
+    <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="es-phone"></div>
+    <div class="form-group"><label class="form-label">Department</label><select class="form-select" id="es-dept"></select></div>
+    <div class="form-group"><label class="form-label">Job Title / Role</label><input class="form-input" id="es-role"></div>
+    <div class="form-group"><label class="form-label">Employment Type</label><select class="form-select" id="es-emptype"><option>Full-time</option><option>Part-time</option><option>Contractor</option><option>Temp / Casual</option></select></div>
+    <div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="es-start" type="date"></div>
+    <div class="form-group"><label class="form-label">Top Size</label><select class="form-select" id="es-top"><option value="">—</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+    <div class="form-group"><label class="form-label">Pants Size</label><input class="form-input" id="es-pants"></div>
+    <div class="form-group span2"><label class="form-label">Address</label><input class="form-input" id="es-address"></div>
+    <div class="form-group"><label class="form-label">Emergency Contact</label><input class="form-input" id="es-emerg"></div>
+    <div class="form-group"><label class="form-label">Emergency Phone</label><input class="form-input" id="es-emerg-phone"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-edit-staff')">Cancel</button><button class="btn btn-primary" onclick="saveEditStaff()">Save Changes</button></div></div>
+</div>
+
+<!-- ADD STAFF -->
+<div class="modal-overlay" id="modal-staff">
+  <div class="modal"><div class="modal-header"><div><div class="modal-title" id="modal-staff-title">Add New Staff Member</div><div class="modal-sub">Enter employee details — all fields marked * are required</div></div><div class="modal-close" onclick="closeModal('modal-staff')">✕</div></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group"><label class="form-label">First Name *</label><input class="form-input" id="sf-fname"></div>
+    <div class="form-group"><label class="form-label">Last Name *</label><input class="form-input" id="sf-lname"></div>
+    <div class="form-group"><label class="form-label">Employee ID *</label><input class="form-input" id="sf-eid" placeholder="e.g. S133, D045"></div>
+    <div class="form-group"><label class="form-label">Date of Birth</label><input class="form-input" id="sf-dob" type="date"></div>
+    <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="sf-email" type="email"></div>
+    <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="sf-phone" placeholder="+27 82 000 0000"></div>
+    <div class="form-group"><label class="form-label">Department *</label><select class="form-select" id="sf-dept"></select></div>
+    <div class="form-group"><label class="form-label">Job Title / Role *</label><input class="form-input" id="sf-role"></div>
+    <div class="form-group"><label class="form-label">Employment Type</label><select class="form-select" id="sf-emptype"><option>Full-time</option><option>Part-time</option><option>Contractor</option><option>Temp / Casual</option></select></div>
+    <div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="sf-start" type="date"></div>
+    <div class="form-group"><label class="form-label">Top Size</label><select class="form-select" id="sf-top"><option value="">—</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+    <div class="form-group"><label class="form-label">Pants Size</label><input class="form-input" id="sf-pants" placeholder="e.g. 34"></div>
+    <div class="form-group span2"><label class="form-label">Address</label><input class="form-input" id="sf-address"></div>
+    <div class="form-group"><label class="form-label">Emergency Contact</label><input class="form-input" id="sf-emerg"></div>
+    <div class="form-group"><label class="form-label">Emergency Phone</label><input class="form-input" id="sf-emerg-phone"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-staff')">Cancel</button><button class="btn btn-primary" onclick="saveStaff()">Save Staff Member</button></div></div>
+</div>
+
+<!-- OFFBOARD STAFF -->
+<div class="modal-overlay" id="modal-offboard">
+  <div class="modal" style="width:520px"><div class="modal-header"><div><div class="modal-title">Offboard Staff Member</div><div class="modal-sub" id="offboard-sub">Processing departure</div></div><div class="modal-close" onclick="closeModal('modal-offboard')">✕</div></div>
+  <div class="modal-body">
+    <div class="offboard-warning">
+      <div class="offboard-warning-title">⚠️ This action deactivates the employee profile</div>
+      <div class="offboard-warning-text">The staff member will be removed from all active compliance checks and alerts. Their historical OHS records (training, medicals) are retained for audit purposes as required by the OHS Act.</div>
+    </div>
+    <div class="form-grid full">
+      <div class="form-group"><label class="form-label">Reason for Leaving *</label>
+        <select class="form-select" id="ob-reason">
+          <option value="">— Select reason —</option>
+          <option>Resignation</option><option>End of Contract</option><option>Retrenchment</option>
+          <option>Dismissal</option><option>Retirement</option><option>Deceased</option><option>Transfer</option><option>Other</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Last Working Day *</label><input class="form-input" id="ob-date" type="date"></div>
+      <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="ob-notes" placeholder="Any additional comments…"></div>
+    </div>
+    <div class="offboard-checklist">
+      <div style="font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:.5px;margin-bottom:4px">OFFBOARDING CHECKLIST</div>
+      <label class="offboard-check"><input type="checkbox" id="ob-chk1"> Access cards / keys returned</label>
+      <label class="offboard-check"><input type="checkbox" id="ob-chk2"> PPE and uniform returned</label>
+      <label class="offboard-check"><input type="checkbox" id="ob-chk3"> Tools / equipment returned</label>
+      <label class="offboard-check"><input type="checkbox" id="ob-chk4"> Exit medical / hearing test completed</label>
+      <label class="offboard-check"><input type="checkbox" id="ob-chk5"> Final pay and documents processed</label>
+    </div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-offboard')">Cancel</button><button class="btn btn-danger" onclick="confirmOffboard()">Confirm Offboarding</button></div></div>
+</div>
+
+<!-- ADD TRAINING -->
+<div class="modal-overlay" id="modal-training">
+  <div class="modal"><div class="modal-header"><div><div class="modal-title">Log Training Record</div></div><div class="modal-close" onclick="closeModal('modal-training')">✕</div></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group"><label class="form-label">Staff Member *</label><select class="form-select" id="tr-staff"></select></div>
+    <div class="form-group"><label class="form-label">Competency *</label><select class="form-select" id="tr-comp"></select></div>
+    <div class="form-group"><label class="form-label">Date Completed *</label><input class="form-input" id="tr-date" type="date"></div>
+    <div class="form-group"><label class="form-label">Expiry Date</label><input class="form-input" id="tr-expiry" type="date"></div>
+    <div class="form-group"><label class="form-label">Training Provider</label><input class="form-input" id="tr-provider" placeholder="e.g. NOSA, In-house, SETA"></div>
+    <div class="form-group"><label class="form-label">Certificate / Ref No.</label><input class="form-input" id="tr-cert"></div>
+    <div class="form-group span2"><label class="form-label">Notes</label><input class="form-input" id="tr-notes"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-training')">Cancel</button><button class="btn btn-primary" onclick="saveTraining()">Log Record</button></div></div>
+</div>
+
+<!-- ADD MEDICAL -->
+<div class="modal-overlay" id="modal-medical">
+  <div class="modal"><div class="modal-header"><div><div class="modal-title">Log Medical Record</div></div><div class="modal-close" onclick="closeModal('modal-medical')">✕</div></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group span2"><label class="form-label">Staff Member *</label><select class="form-select" id="med-staff"></select></div>
+    <div class="form-group"><label class="form-label">Examination Type *</label><select class="form-select" id="med-type"><option>Pre-Employment Medical</option><option>Periodic Medical (Annual)</option><option>Exit Medical</option><option>Return-to-Work Medical</option><option>Fitness for Duty Assessment</option><option>Noise-Induced Hearing Loss (NIHL)</option><option>Lung Function Test (Spirometry)</option><option>Vision Test</option><option>Biological Monitoring</option><option>Occupational Health Assessment</option></select></div>
+    <div class="form-group"><label class="form-label">Medical Outcome *</label><select class="form-select" id="med-outcome"><option value="fit">Fit for Duty</option><option value="fit-restrictions">Fit with Restrictions</option><option value="unfit-temp">Temporarily Unfit</option><option value="unfit">Unfit for Duty</option><option value="referred">Referred</option></select></div>
+    <div class="form-group"><label class="form-label">Exam Date *</label><input class="form-input" id="med-date" type="date"></div>
+    <div class="form-group"><label class="form-label">Expiry / Review Date *</label><input class="form-input" id="med-expiry" type="date"></div>
+    <div class="form-group"><label class="form-label">Doctor / Clinic</label><input class="form-input" id="med-doctor"></div>
+    <div class="form-group"><label class="form-label">Certificate No.</label><input class="form-input" id="med-cert"></div>
+    <div class="form-group span2"><label class="form-label">Restrictions / Notes</label><input class="form-input" id="med-notes"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-medical')">Cancel</button><button class="btn btn-primary" onclick="saveMedical()">Log Record</button></div></div>
+</div>
+
+<!-- ADD COMPETENCY -->
+<div class="modal-overlay" id="modal-comp">
+  <div class="modal"><div class="modal-header"><div><div class="modal-title">Add OHS Competency</div></div><div class="modal-close" onclick="closeModal('modal-comp')">✕</div></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="form-group span2"><label class="form-label">Competency Name *</label><input class="form-input" id="cp-name"></div>
+    <div class="form-group"><label class="form-label">Category</label><select class="form-select" id="cp-cat"><option>Fire Safety</option><option>First Aid</option><option>Hazardous Materials</option><option>Equipment Operation</option><option>Environmental</option><option>Emergency Response</option><option>PPE & Safety</option><option>Legal & Compliance</option><option>Risk Assessment</option><option>Other</option></select></div>
+    <div class="form-group"><label class="form-label">Validity (months)</label><input class="form-input" id="cp-validity" type="number" value="12"></div>
+    <div class="form-group"><label class="form-label">Mandatory</label><select class="form-select" id="cp-mandatory"><option value="yes">Yes — All Staff</option><option value="role">Role Specific</option><option value="no">Optional</option></select></div>
+    <div class="form-group"><label class="form-label">Renewal Method</label><select class="form-select" id="cp-renewal"><option>Re-examination</option><option>Refresher Course</option><option>On-the-Job Assessment</option><option>Online Module</option><option>No Renewal Required</option></select></div>
+    <div class="form-group span2"><label class="form-label">Description</label><input class="form-input" id="cp-desc"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-comp')">Cancel</button><button class="btn btn-primary" onclick="saveComp()">Add Competency</button></div></div>
+</div>
+
+<!-- ADD DEPARTMENT -->
+<div class="modal-overlay" id="modal-dept">
+  <div class="modal" style="width:420px"><div class="modal-header"><div><div class="modal-title">Add Department</div></div><div class="modal-close" onclick="closeModal('modal-dept')">✕</div></div>
+  <div class="modal-body"><div class="form-grid full">
+    <div class="form-group"><label class="form-label">Department Name *</label><input class="form-input" id="dp-name"></div>
+    <div class="form-group"><label class="form-label">Department Head</label><input class="form-input" id="dp-head"></div>
+    <div class="form-group"><label class="form-label">Location / Site</label><input class="form-input" id="dp-loc"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-dept')">Cancel</button><button class="btn btn-primary" onclick="saveDept()">Add Department</button></div></div>
+</div>
+
+<!-- ADD USER ACCOUNT -->
+<div class="modal-overlay" id="modal-user">
+  <div class="modal" style="width:480px"><div class="modal-header"><div><div class="modal-title">Create User Account</div><div class="modal-sub">User will receive a login email from Supabase</div></div><div class="modal-close" onclick="closeModal('modal-user')">✕</div></div>
+  <div class="modal-body"><div class="form-grid full">
+    <div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="usr-name"></div>
+    <div class="form-group"><label class="form-label">Email Address *</label><input class="form-input" id="usr-email" type="email" placeholder="user@company.com"></div>
+    <div class="form-group"><label class="form-label">Temporary Password *</label><input class="form-input" id="usr-password" type="password" placeholder="Min 8 characters"></div>
+    <div class="form-group"><label class="form-label">Role</label>
+      <select class="form-select" id="usr-role">
+        <option value="admin">Admin — Full access, can add/remove staff</option>
+        <option value="ohs_officer">OHS Officer — Log training & medicals</option>
+        <option value="hr">HR — View all, edit staff details</option>
+        <option value="viewer">Viewer — Read only</option>
+      </select>
+    </div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-user')">Cancel</button><button class="btn btn-primary" onclick="saveUser()">Create Account</button></div></div>
+</div>
+
+<!-- STAFF DETAIL -->
+<div class="modal-overlay" id="modal-detail">
+  <div class="modal detail-modal">
+    <div class="modal-header"><div id="detail-hdr"></div><div class="modal-close" onclick="closeModal('modal-detail')">✕</div></div>
+    <div class="modal-body">
+      <div class="detail-tabs">
+        <div class="detail-tab active" onclick="switchDetailTab('personal',this)">Personal Info</div>
+        <div class="detail-tab" onclick="switchDetailTab('training',this)">Training</div>
+        <div class="detail-tab" onclick="switchDetailTab('compliance',this)">Compliance</div>
+        <div class="detail-tab" onclick="switchDetailTab('medical',this)">🏥 Medical</div>
+      </div>
+      <div id="dtab-personal"></div>
+      <div id="dtab-training" style="display:none"></div>
+      <div id="dtab-compliance" style="display:none"></div>
+      <div id="dtab-medical" style="display:none"></div>
+    </div>
+    <div class="modal-footer" id="detail-footer"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-icon">✅</span> <span id="toast-msg"></span></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  SAFESTAFF v3 — Supabase Connected
+// ══════════════════════════════════════════════════════════════
+
+const COLORS = ['#e8f04a','#4af0a0','#4ab4f0','#f04a7a','#c44af0','#f09a4a','#4af0d4','#f0e04a'];
+const DEPT_COLORS = {
+  'Sales':['#e8f04a','#e8f04a'],
+  'Management & Admin Staff':['#4ab4f0','#4ab4f0'],
+  'Contracts':['#f04a7a','#f04a7a'],
+  'Service':['#4af0a0','#4af0a0'],
+  'Workshop & Warehouse':['#f09a4a','#f09a4a']
+};
+
+let sb = null;
+let currentUser = null;
+let currentUserRole = 'viewer';
+let currentView = 'dashboard';
+let offboardTarget = null;
+let cache = { staff:[], departments:[], competencies:[], training:[], medicals:[] };
+
+// ── SUPABASE CONFIG — hardcoded ────────────────────────────
+const SUPABASE_URL = 'https://bdozzouagbcyfxujtwhc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_D5FqjibIuw_Lkvi6dNiOWw_mb1YBbQy';
+
+function initSupabase() {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+}
+
+// ── AUTH ───────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-err');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display='none';
+  if(!email||!pass) { errEl.textContent='Enter email and password'; errEl.style.display='block'; return; }
+  btn.innerHTML='<span class="spinner"></span> Signing in…'; btn.disabled=true;
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if(error) throw error;
+    currentUser = data.user;
+    await loadUserRole();
+    await showApp();
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display='block';
+    btn.innerHTML='Sign In'; btn.disabled=false;
+  }
+}
+async function loadUserRole() {
+  try {
+    const { data, error } = await sb.from('user_profiles').select('role,full_name,email').eq('id', currentUser.id).single();
+    if(error) {
+      console.warn('user_profiles fetch error:', error.message);
+      // Profile may not exist yet — create it now
+      await sb.from('user_profiles').upsert({
+        id: currentUser.id,
+        email: currentUser.email,
+        full_name: currentUser.email.split('@')[0],
+        role: 'viewer',
+        active: true
+      }, { onConflict: 'id' });
+      currentUserRole = 'viewer';
+      currentUser._name = currentUser.email.split('@')[0];
+      return;
+    }
+    if(data) {
+      currentUserRole = data.role || 'viewer';
+      currentUser._name = data.full_name || data.email || currentUser.email;
+    }
+  } catch(e) {
+    console.warn('loadUserRole failed:', e.message);
+    currentUserRole = 'viewer';
+  }
+}
+async function doLogout() {
+  await sb.auth.signOut();
+  currentUser=null; currentUserRole='viewer';
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-password').value='';
+}
+function isAdmin() { return currentUserRole==='admin'; }
+function canEdit() { return ['admin','ohs_officer','hr'].includes(currentUserRole); }
+
+async function showApp() {
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('main-app').style.display='flex';
+
+  const initials = (currentUser._name||currentUser.email).split(/[\s@]/).map(w=>w[0]).filter(Boolean).join('').slice(0,2).toUpperCase();
+  document.getElementById('user-avatar').textContent = initials;
+  document.getElementById('user-name').textContent = currentUser._name || currentUser.email;
+  document.getElementById('user-role').textContent = currentUserRole.replace(/_/g,' ').toUpperCase();
+
+  applyRoleUI();
+  // CTA is always visible now - no need to show/hide based on role
+
+  setSyncing(true);
+  await loadAll();
+  setSyncing(false);
+  renderDashboard();
+}
+
+function applyRoleUI() {
+  const sidebar = document.getElementById('sidebar-root');
+  if(isAdmin()) {
+    sidebar.classList.add('is-admin');
+  } else {
+    sidebar.classList.remove('is-admin');
+  }
+  // Show role colour on the user pill
+  const roleColors = { admin:'var(--red)', ohs_officer:'var(--green)', hr:'var(--blue)', viewer:'var(--text-muted)' };
+  document.getElementById('user-role').style.color = roleColors[currentUserRole] || 'var(--text-muted)';
+}
+
+// ── SYNC INDICATOR ─────────────────────────────────────────
+function setSyncing(s) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-label');
+  dot.className = 'sync-dot' + (s?' syncing':'');
+  lbl.textContent = s ? 'Syncing…' : 'Connected · ' + new Date().toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
+}
+
+// ── DATA LOADING ───────────────────────────────────────────
+async function loadAll() {
+  const [s,d,c,t,m] = await Promise.all([
+    sb.from('staff').select('*, departments(name)').order('lname'),
+    sb.from('departments').select('*, staff(count)').order('name'),
+    sb.from('competencies').select('*').order('category'),
+    sb.from('training_records').select('*, staff(fname,lname,eid), competencies(name,category)').order('date_completed', {ascending:false}),
+    sb.from('medicals').select('*, staff(fname,lname,eid)').order('exam_date', {ascending:false})
+  ]);
+  cache.staff        = (s.data||[]).map(x=>({...x, dept_name: x.departments?.name||'—'}));
+  cache.departments  = d.data||[];
+  cache.competencies = c.data||[];
+  cache.training     = (t.data||[]).map(x=>({...x, fname:x.staff?.fname, lname:x.staff?.lname, eid:x.staff?.eid, competency_name:x.competencies?.name, category:x.competencies?.category}));
+  cache.medicals     = (m.data||[]).map(x=>({...x, fname:x.staff?.fname, lname:x.staff?.lname, eid:x.staff?.eid}));
+}
+
+// ── HELPERS ────────────────────────────────────────────────
+function fmt(d) { if(!d) return '—'; return new Date(d).toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'}); }
+function today() { return new Date().toISOString().split('T')[0]; }
+function daysUntil(d) { if(!d) return null; return Math.ceil((new Date(d)-new Date())/86400000); }
+function initials(f,l) { return ((f||'?')[0]+((l||'')[0]||'')).toUpperCase(); }
+function colorFor(s) { let h=0; for(let c of String(s||'x')) h=(h+c.charCodeAt(0))%COLORS.length; return COLORS[h]; }
+function tStatus(exp) { if(!exp) return 'current'; const d=daysUntil(exp); return d<0?'expired':d<=90?'expiring':'current'; }
+function mStatus(exp) { if(!exp) return 'expired'; const d=daysUntil(exp); return d<0?'expired':d<=90?'expiring':'current'; }
+
+const OUTCOME_LABEL = {'fit':'Fit for Duty','fit-restrictions':'Fit w/ Restrictions','unfit-temp':'Temp. Unfit','unfit':'Unfit for Duty','referred':'Referred'};
+const OUTCOME_BADGE = {'fit':'badge-green','fit-restrictions':'badge-yellow','unfit-temp':'badge-yellow','unfit':'badge-red','referred':'badge-blue'};
+const STATUS_BADGE  = {
+  current: '<span class="badge badge-green"><span class="badge-dot"></span>Current</span>',
+  expiring:'<span class="badge badge-yellow"><span class="badge-dot"></span>Expiring</span>',
+  expired: '<span class="badge badge-red"><span class="badge-dot"></span>Expired</span>'
+};
+
+function showToast(msg, icon='✅') {
+  document.getElementById('toast-msg').textContent=msg;
+  document.getElementById('toast-icon').textContent=icon;
+  const t=document.getElementById('toast'); t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3200);
+}
+
+// ── NAVIGATION ─────────────────────────────────────────────
+const VIEW_TITLES = {
+  dashboard:['Dashboard','Overview'], staff:['Staff Directory','Personnel'],
+  departments:['Departments','Structure'], training:['Training Records','OHS Compliance'],
+  competencies:['Competency Framework','OHS Requirements'], medicals:['Medical Records','Occupational Health'],
+  alerts:['Compliance Alerts','Action Required'], matrix:['Skills Matrix','Competency Overview'],
+  admin:['Admin Panel','User & Data Management'], offboarding:['Staff Offboarding','Lifecycle Management']
+};
+const CTA_MAP = {
+  dashboard:'Add Staff', staff:'Add Staff', training:'Log Training',
+  competencies:'Add Competency', medicals:'Log Medical', admin:'Add Staff',
+  offboarding:null, departments:null, alerts:null, matrix:null
+};
+
+function switchView(v, el) {
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+  if(el) el.classList.add('active');
+  currentView=v;
+  const [t,s]=VIEW_TITLES[v]||[v,v];
+  document.getElementById('topbar-title').innerHTML=`${t} <span>${s}</span>`;
+  // Update CTA label based on current view - always visible
+  const ctaLabels = {
+    dashboard:'＋ Add Staff', staff:'＋ Add Staff', training:'＋ Log Training',
+    competencies:'＋ Add Competency', medicals:'＋ Log Medical', admin:'＋ Add Staff',
+    offboarding:'＋ Add Staff', departments:'＋ Add Department', alerts:'＋ Add Staff', matrix:'＋ Add Staff'
+  };
+  document.getElementById('topbar-cta').textContent = ctaLabels[v] || '＋ Add Staff';
+  renderView(v);
+}
+
+function handleCTA() {
+  if(currentView==='training') openAddTraining();
+  else if(currentView==='medicals') openAddMedical(null);
+  else if(currentView==='competencies') openAddComp();
+  else openAddStaff();
+}
+
+function renderView(v) {
+  const fn = { dashboard:renderDashboard, staff:()=>renderStaff('all'), departments:renderDepts,
+    training:()=>renderTraining('all'), competencies:renderComps, medicals:()=>renderMedicals('all'),
+    alerts:renderAlerts, matrix:renderMatrix, admin:renderAdmin, offboarding:renderOffboarding }[v];
+  if(fn) fn();
+}
+
+// ── DASHBOARD ──────────────────────────────────────────────
+async function renderDashboard() {
+  const active = cache.staff.filter(s=>s.active);
+  const trExpiring = cache.training.filter(t=>tStatus(t.expiry_date)==='expiring').length;
+  const trExpired  = cache.training.filter(t=>tStatus(t.expiry_date)==='expired').length;
+  const medExpiring= cache.medicals.filter(m=>mStatus(m.expiry_date)==='expiring').length;
+  const medExpired = cache.medicals.filter(m=>mStatus(m.expiry_date)==='expired').length;
+  const noMedical  = active.filter(s=>!cache.medicals.find(m=>m.staff_id===s.id)).length;
+
+  document.getElementById('stat-total').textContent    = active.length;
+  document.getElementById('stat-expiring').textContent = trExpiring + medExpiring;
+  document.getElementById('stat-overdue').textContent  = trExpired + medExpired + noMedical;
+  document.getElementById('stat-current').textContent  = active.length - (trExpired + medExpired + noMedical > 0 ? trExpired : 0);
+
+  const totalAlerts = trExpiring+trExpired+medExpiring+medExpired+noMedical;
+  const ab = document.getElementById('alert-badge');
+  ab.textContent=totalAlerts; ab.style.display=totalAlerts>0?'':'none';
+  const mb = document.getElementById('med-badge');
+  const mi = medExpiring+medExpired+noMedical;
+  mb.textContent=mi; mb.style.display=mi>0?'':'none';
+
+  // Activity
+  const { data:acts } = await sb.from('activity_log')
+    .select('*, staff(fname,lname,eid)').order('created_at',{ascending:false}).limit(12);
+  const tbody = document.getElementById('activity-tbody');
+  if(!acts||!acts.length) { tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">No activity yet — start logging training and medical records</td></tr>`; return; }
+  tbody.innerHTML = acts.map(a=>{
+    const bg=colorFor(a.staff?.eid||'x');
+    return `<tr>
+      <td><div class="staff-cell"><div class="avatar" style="background:${bg}20;color:${bg};width:28px;height:28px;font-size:10px">${a.staff?initials(a.staff.fname,a.staff.lname):'?'}</div><div><div class="staff-name">${a.staff?.fname||'—'} ${a.staff?.lname||''}</div><div class="staff-id">${a.staff?.eid||''}</div></div></div></td>
+      <td style="font-size:12px;color:var(--text-dim)">${a.action}</td>
+      <td style="font-size:12px">${a.item||'—'}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${fmt(a.created_at)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── STAFF ──────────────────────────────────────────────────
+let staffFilt='all';
+function filterStaff(f,el) { staffFilt=f; document.querySelectorAll('#view-staff .filter-tab').forEach(x=>x.classList.remove('active')); el.classList.add('active'); renderStaff(f); }
+
+function renderStaff(filter) {
+  let list = filter==='active'?cache.staff.filter(s=>s.active):filter==='inactive'?cache.staff.filter(s=>!s.active):cache.staff;
+  const q=document.getElementById('global-search').value.toLowerCase();
+  if(q) list=list.filter(s=>`${s.fname} ${s.lname} ${s.eid} ${s.role}`.toLowerCase().includes(q));
+  document.getElementById('staff-count-lbl').textContent=`${list.length} member${list.length!==1?'s':''}`;
+  const tbody=document.getElementById('staff-tbody');
+  if(!list.length){tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👥</div><div class="empty-title">No staff found</div></div></td></tr>`;return;}
+  tbody.innerHTML=list.map(s=>{
+    const bg=colorFor(s.eid);
+    const badge=s.active?'<span class="badge badge-green"><span class="badge-dot"></span>Active</span>':'<span class="badge badge-red"><span class="badge-dot"></span>Inactive</span>';
+    return `<tr onclick="openDetail(${s.id})">
+      <td><div class="staff-cell"><div class="avatar" style="background:${bg}20;color:${bg}">${initials(s.fname,s.lname)}</div><div><div class="staff-name">${s.fname} ${s.lname}</div><div class="staff-id">${s.eid}</div></div></div></td>
+      <td>${s.dept_name}</td><td>${s.role}</td>
+      <td><span class="badge badge-blue">${s.emptype}</span></td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${s.top_size||'—'} / ${s.pants_size||'—'}</td>
+      <td>${badge}</td>
+      <td onclick="event.stopPropagation()"><div class="actions-cell">
+        <div class="icon-btn" onclick="openDetail(${s.id})" title="View Profile">👁</div>
+        <div class="icon-btn" onclick="openEditStaff(${s.id})" title="Edit Details" style="font-size:11px">✏️</div>
+        <div class="icon-btn warning" onclick="openOffboard(${s.id})" title="Offboard">🚪</div>
+        <div class="icon-btn danger" onclick="deleteStaff(${s.id},'${s.fname} ${s.lname}')" title="Delete permanently">🗑</div>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── DEPARTMENTS ────────────────────────────────────────────
+function renderDepts() {
+  const wrap=document.getElementById('dept-cards');
+  const deptColorMap={
+    'Sales':'#e8f04a','Management & Admin Staff':'#4ab4f0','Contracts':'#f04a7a',
+    'Service':'#4af0a0','Workshop & Warehouse':'#f09a4a'
+  };
+  const icons={'Sales':'💼','Management & Admin Staff':'🏛️','Contracts':'📋','Service':'🔧','Workshop & Warehouse':'🏭'};
+  wrap.innerHTML=cache.departments.map(d=>{
+    const c=deptColorMap[d.name]||colorFor(d.name);
+    const cnt = cache.staff.filter(s=>s.dept_id===d.id&&s.active).length;
+    return `<div class="dept-card" style="--card-accent:${c}">
+      <div style="font-size:28px;margin-bottom:8px">${icons[d.name]||'🏢'}</div>
+      <div class="dept-card-name">${d.name}</div>
+      <div class="dept-card-count" style="color:${c}">${cnt}</div>
+      <div class="dept-card-meta">
+        <span>Active staff members</span>
+        ${d.head?`<span>👤 ${d.head}</span>`:''}
+        ${d.location?`<span>📍 ${d.location}</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── TRAINING ───────────────────────────────────────────────
+function filterTraining(f,el){document.querySelectorAll('#view-training .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderTraining(f);}
+function renderTraining(filter) {
+  let list=filter==='all'?cache.training:cache.training.filter(t=>tStatus(t.expiry_date)===filter);
+  document.getElementById('training-count-lbl').textContent=`${list.length} record${list.length!==1?'s':''}`;
+  const tbody=document.getElementById('training-tbody');
+  if(!list.length){tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🎓</div><div class="empty-title">No training records</div></div></td></tr>`;return;}
+  tbody.innerHTML=list.map(t=>{
+    const bg=colorFor(t.eid); const st=tStatus(t.expiry_date);
+    return `<tr>
+      <td><div class="staff-cell"><div class="avatar" style="background:${bg}20;color:${bg};width:28px;height:28px;font-size:10px">${initials(t.fname,t.lname)}</div><div><div class="staff-name">${t.fname} ${t.lname}</div><div class="staff-id">${t.eid}</div></div></div></td>
+      <td style="font-weight:600;font-size:12px">${t.competency_name||'—'}</td>
+      <td><span class="badge badge-blue">${t.category||'—'}</span></td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px">${fmt(t.date_completed)}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px">${t.expiry_date?fmt(t.expiry_date):'—'}</td>
+      <td style="font-size:12px;color:var(--text-dim)">${t.provider||'—'}</td>
+      <td>${STATUS_BADGE[st]}</td>
+      <td onclick="event.stopPropagation()"><div class="actions-cell"><div class="icon-btn danger" onclick="deleteTraining(${t.id})" title="Remove">🗑</div></div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── COMPETENCIES ───────────────────────────────────────────
+function renderComps() {
+  const tbody=document.getElementById('comp-tbody');
+  tbody.innerHTML=cache.competencies.map(c=>{
+    const mb={yes:'<span class="badge badge-red">All Staff</span>',role:'<span class="badge badge-yellow">Role</span>',no:'<span class="badge badge-blue">Optional</span>'}[c.mandatory]||'';
+    return `<tr>
+      <td><div style="font-weight:600;font-size:13px">${c.name}</div><div style="font-size:11px;color:var(--text-dim)">${c.description||''}</div></td>
+      <td><span class="badge badge-blue">${c.category}</span></td><td>${mb}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${c.validity_months?c.validity_months+' months':'Permanent'}</td>
+      <td style="font-size:12px;color:var(--text-dim)">${c.renewal_method||'—'}</td>
+      <td onclick="event.stopPropagation()"><div class="actions-cell"><div class="icon-btn danger" onclick="deleteComp(${c.id})" title="Remove">🗑</div></div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── MEDICALS ───────────────────────────────────────────────
+function filterMedicals(f,el){document.querySelectorAll('#view-medicals .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderMedicals(f);}
+function renderMedicals(filter) {
+  const tbody=document.getElementById('med-tbody');
+  const active=cache.staff.filter(s=>s.active);
+  let rows=[];
+  if(filter==='unrecorded'){
+    rows=active.filter(s=>!cache.medicals.find(m=>m.staff_id===s.id)).map(s=>({_noRecord:true,...s}));
+    document.getElementById('med-count-lbl').textContent=`${rows.length} without record`;
+    if(!rows.length){tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All active staff have medical records</div></div></td></tr>`;return;}
+    tbody.innerHTML=rows.map(s=>{
+      const bg=colorFor(s.eid);
+      return `<tr>
+        <td><div class="staff-cell"><div class="avatar" style="background:${bg}20;color:${bg};width:28px;height:28px;font-size:10px">${initials(s.fname,s.lname)}</div><div><div class="staff-name">${s.fname} ${s.lname}</div><div class="staff-id">${s.eid}</div></div></div></td>
+        <td colspan="6" style="color:var(--text-muted);font-size:12px;font-style:italic">No medical record on file</td>
+        <td><span class="badge badge-red">Not Recorded</span></td>
+        <td><div class="actions-cell"><div class="icon-btn" onclick="openAddMedical(${s.id})" title="Log medical">＋</div></div></td>
+      </tr>`;
+    }).join(''); return;
+  }
+  let list=filter==='all'?cache.medicals:cache.medicals.filter(m=>mStatus(m.expiry_date)===filter);
+  document.getElementById('med-count-lbl').textContent=`${list.length} record${list.length!==1?'s':''}`;
+  if(!list.length){tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">🏥</div><div class="empty-title">No records found</div></div></td></tr>`;return;}
+  tbody.innerHTML=list.map(m=>{
+    const bg=colorFor(m.eid); const st=mStatus(m.expiry_date);
+    return `<tr>
+      <td><div class="staff-cell"><div class="avatar" style="background:${bg}20;color:${bg};width:28px;height:28px;font-size:10px">${initials(m.fname,m.lname)}</div><div><div class="staff-name">${m.fname} ${m.lname}</div><div class="staff-id">${m.eid}</div></div></div></td>
+      <td style="font-weight:600;font-size:12px">${m.exam_type}</td>
+      <td style="font-size:12px;color:var(--text-dim)">${m.doctor||'—'}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px">${fmt(m.exam_date)}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px">${fmt(m.expiry_date)}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim)">${m.cert_number||'—'}</td>
+      <td><span class="badge ${OUTCOME_BADGE[m.outcome]||'badge-blue'}">${OUTCOME_LABEL[m.outcome]||m.outcome}</span></td>
+      <td>${STATUS_BADGE[st]}</td>
+      <td onclick="event.stopPropagation()"><div class="actions-cell"><div class="icon-btn danger" onclick="deleteMedical(${m.id})" title="Remove">🗑</div></div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── ALERTS ─────────────────────────────────────────────────
+function renderAlerts() {
+  const active=cache.staff.filter(s=>s.active);
+  const alerts=[
+    ...cache.training.filter(t=>tStatus(t.expiry_date)==='expired').map(t=>({type:'Training Expired',icon:'🚨',color:'var(--red)',name:`${t.fname} ${t.lname}`,eid:t.eid,item:t.competency_name,date:t.expiry_date})),
+    ...cache.training.filter(t=>tStatus(t.expiry_date)==='expiring').map(t=>({type:'Training Expiring',icon:'⏳',color:'var(--yellow)',name:`${t.fname} ${t.lname}`,eid:t.eid,item:t.competency_name,date:t.expiry_date})),
+    ...cache.medicals.filter(m=>mStatus(m.expiry_date)==='expired').map(m=>({type:'Medical Expired',icon:'🏥',color:'var(--red)',name:`${m.fname} ${m.lname}`,eid:m.eid,item:m.exam_type,date:m.expiry_date})),
+    ...cache.medicals.filter(m=>mStatus(m.expiry_date)==='expiring').map(m=>({type:'Medical Due Soon',icon:'⏳',color:'var(--yellow)',name:`${m.fname} ${m.lname}`,eid:m.eid,item:m.exam_type,date:m.expiry_date})),
+    ...active.filter(s=>!cache.medicals.find(m=>m.staff_id===s.id)).map(s=>({type:'No Medical on Record',icon:'⚠️',color:'var(--red)',name:`${s.fname} ${s.lname}`,eid:s.eid,item:'Medical examination required',date:null}))
+  ];
+  document.getElementById('alert-count-lbl').textContent=`${alerts.length} alert${alerts.length!==1?'s':''}`;
+  const wrap=document.getElementById('alerts-list');
+  if(!alerts.length){wrap.innerHTML=`<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">No alerts</div><div class="empty-sub">All active staff are fully compliant</div></div>`;return;}
+  wrap.innerHTML=alerts.map(a=>`
+    <div class="alert-item" style="--alert-color:${a.color}">
+      <span class="alert-icon">${a.icon}</span>
+      <div class="alert-text"><div class="alert-title">${a.name} <span style="color:var(--text-dim);font-family:'IBM Plex Mono',monospace;font-size:10px">(${a.eid})</span></div><div class="alert-sub">${a.type} — ${a.item}</div></div>
+      <div class="alert-date">${a.date?fmt(a.date):'—'}</div>
+    </div>`).join('');
+}
+
+// ── SKILLS MATRIX ──────────────────────────────────────────
+function renderMatrix() {
+  const staffList=cache.staff.filter(s=>s.active).slice(0,40);
+  const content=document.getElementById('matrix-content');
+  if(!staffList.length||!cache.competencies.length){content.innerHTML=`<div class="empty-state"><div class="empty-icon">⬛</div><div class="empty-title">No data</div></div>`;return;}
+  const headerCells = staffList.map(s=>{const bg=colorFor(s.eid);return `<div style="width:22px;text-align:center;font-size:8px;color:var(--text-muted);writing-mode:vertical-rl;transform:rotate(180deg);height:60px;overflow:hidden;font-family:'IBM Plex Mono',monospace" title="${s.fname} ${s.lname}">${s.eid}</div>`;}).join('');
+  const rows = cache.competencies.map(c=>{
+    const dots=staffList.map(s=>{
+      const rec=cache.training.find(t=>t.staff_id===s.id&&t.competency_id===c.id);
+      let cls='none',sym='–';
+      if(rec){const st=tStatus(rec.expiry_date);cls=st==='current'?'certified':st==='expiring'?'pending':'expired';sym=st==='current'?'✓':st==='expiring'?'!':'✗';}
+      return `<div class="comp-dot ${cls}" title="${s.fname} ${s.lname} — ${cls}">${sym}</div>`;
+    }).join('');
+    return `<div class="comp-row"><div style="width:220px;flex-shrink:0"><div class="comp-name">${c.name}</div><div class="comp-cat">${c.category}</div></div><div style="display:flex;gap:2px;flex-wrap:wrap">${dots}</div></div>`;
+  }).join('');
+  content.innerHTML=`<div style="display:flex;padding:10px 20px 0 240px;gap:2px">${headerCells}</div>${rows}`;
+}
+
+// ── ADMIN ──────────────────────────────────────────────────
+async function renderAdmin() {
+  // Users table
+  const { data:users } = await sb.from('user_profiles').select('*').order('full_name');
+  const tbody=document.getElementById('users-tbody');
+  if(!users||!users.length){tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">No users found</td></tr>`;}
+  else tbody.innerHTML=users.map(u=>`<tr>
+    <td style="font-weight:600">${u.full_name||'—'}</td>
+    <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${u.email||'—'}</td>
+    <td><span class="badge ${u.role==='admin'?'badge-red':u.role==='ohs_officer'?'badge-green':'badge-blue'}">${u.role}</span></td>
+    <td><span class="badge ${u.active?'badge-green':'badge-red'}">${u.active?'Active':'Inactive'}</span></td>
+    <td><div class="actions-cell">${u.id!==currentUser.id?`<div class="icon-btn danger" onclick="deactivateUser('${u.id}','${u.full_name}')" title="Deactivate">🚫</div>`:''}</div></td>
+  </tr>`).join('');
+
+  // DB stats
+  document.getElementById('db-stats').innerHTML=[
+    {label:'Staff',val:cache.staff.length,icon:'👥'},
+    {label:'Training Records',val:cache.training.length,icon:'🎓'},
+    {label:'Medical Records',val:cache.medicals.length,icon:'🏥'}
+  ].map(s=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center">
+    <div style="font-size:24px;margin-bottom:8px">${s.icon}</div>
+    <div style="font-size:28px;font-weight:800;margin-bottom:4px">${s.val}</div>
+    <div style="font-size:11px;color:var(--text-dim)">${s.label}</div>
+  </div>`).join('');
+}
+
+// ── OFFBOARDING ────────────────────────────────────────────
+function renderOffboarding() {
+  const active=cache.staff.filter(s=>s.active);
+  const inactive=cache.staff.filter(s=>!s.active);
+  document.getElementById('inactive-count-lbl').textContent=`${inactive.length} offboarded`;
+
+  // Active staff - ready to offboard
+  const tbody=document.getElementById('offboard-tbody');
+  tbody.innerHTML=active.map(s=>{
+    const bg=colorFor(s.eid);
+    return `<tr>
+      <td><div class="staff-cell"><div class="avatar" style="background:${bg}20;color:${bg}">${initials(s.fname,s.lname)}</div><div><div class="staff-name">${s.fname} ${s.lname}</div><div class="staff-id">${s.eid}</div></div></div></td>
+      <td>${s.dept_name}</td><td>${s.role}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${fmt(s.start_date)||'—'}</td>
+      <td style="color:var(--text-muted);font-size:12px">Active</td>
+      <td><div class="actions-cell">
+        <button class="btn btn-warning" style="padding:5px 10px;font-size:11px" onclick="openOffboard(${s.id})">🚪 Offboard</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  // Inactive / already offboarded
+  const tbody2=document.getElementById('offboarded-tbody');
+  if(!inactive.length){tbody2.innerHTML=`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">No offboarded staff</td></tr>`;return;}
+  tbody2.innerHTML=inactive.map(s=>{
+    const bg=colorFor(s.eid);
+    const trCount=cache.training.filter(t=>t.staff_id===s.id).length;
+    const medCount=cache.medicals.filter(m=>m.staff_id===s.id).length;
+    return `<tr>
+      <td><div class="staff-cell"><div class="avatar" style="background:${bg}20;color:${bg};opacity:.6">${initials(s.fname,s.lname)}</div><div><div class="staff-name" style="opacity:.7">${s.fname} ${s.lname}</div><div class="staff-id">${s.eid}</div></div></div></td>
+      <td style="color:var(--text-dim)">${s.dept_name}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${fmt(s.offboard_date)||'—'}</td>
+      <td style="color:var(--text-dim);font-size:12px">${s.offboard_reason||'—'}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${trCount} training, ${medCount} medical</td>
+      <td><div class="actions-cell">
+        <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="reactivateStaff(${s.id},'${s.fname} ${s.lname}')">↩ Reactivate</button>
+        ${isAdmin()?`<div class="icon-btn danger" onclick="deleteStaff(${s.id},'${s.fname} ${s.lname}')" title="Permanently delete">🗑</div>`:''}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── STAFF DETAIL ───────────────────────────────────────────
+async function openDetail(id) {
+  const s=cache.staff.find(x=>x.id===id); if(!s) return;
+  const bg=colorFor(s.eid);
+  const badge=s.active?'<span class="badge badge-green"><span class="badge-dot"></span>Active</span>':'<span class="badge badge-red"><span class="badge-dot"></span>Inactive</span>';
+
+  document.getElementById('detail-hdr').innerHTML=`
+    <div class="detail-header-row">
+      <div class="detail-avatar-lg" style="background:${bg}20;color:${bg}">${initials(s.fname,s.lname)}</div>
+      <div><div class="detail-name">${s.fname} ${s.lname}</div>
+      <div class="detail-meta">${badge} <span>${s.role}</span> <span style="color:var(--text-muted)">·</span> <span>${s.dept_name}</span> <span style="color:var(--text-muted)">·</span> <span style="font-family:'IBM Plex Mono',monospace">${s.eid}</span></div></div>
+    </div>`;
+
+  // Personal tab
+  document.getElementById('dtab-personal').innerHTML=`
+    <div class="info-grid">
+      <div><div class="info-label">Employee ID</div><div class="info-value" style="font-family:'IBM Plex Mono',monospace">${s.eid}</div></div>
+      <div><div class="info-label">Full Name</div><div class="info-value">${s.fname} ${s.lname}</div></div>
+      <div><div class="info-label">Date of Birth</div><div class="info-value">${fmt(s.dob)||'—'}</div></div>
+      <div><div class="info-label">Employment Type</div><div class="info-value">${s.emptype}</div></div>
+      <div><div class="info-label">Email</div><div class="info-value">${s.email||'—'}</div></div>
+      <div><div class="info-label">Phone</div><div class="info-value">${s.phone||'—'}</div></div>
+      <div><div class="info-label">Department</div><div class="info-value">${s.dept_name}</div></div>
+      <div><div class="info-label">Job Title</div><div class="info-value">${s.role}</div></div>
+      <div><div class="info-label">Start Date</div><div class="info-value">${fmt(s.start_date)||'—'}</div></div>
+      <div><div class="info-label">Address</div><div class="info-value">${s.address||'—'}</div></div>
+      <div><div class="info-label">Emergency Contact</div><div class="info-value">${s.emerg_contact||'—'}</div></div>
+      <div><div class="info-label">Emergency Phone</div><div class="info-value">${s.emerg_phone||'—'}</div></div>
+    </div>
+    ${s.top_size||s.pants_size?`<div style="margin-top:16px;padding:12px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;display:flex;gap:24px;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted)">Uniform</span>${s.top_size?`<div><span style="font-size:10px;color:var(--text-dim)">Top: </span><span class="badge badge-blue">${s.top_size}</span></div>`:''}${s.pants_size?`<div><span style="font-size:10px;color:var(--text-dim)">Pants: </span><span class="badge badge-blue">${s.pants_size}</span></div>`:''}</div>`:''}`;
+
+  // Training tab
+  const tRecs=cache.training.filter(t=>t.staff_id===id);
+  const catIcons={'First Aid':'🩺','Fire Safety':'🔥','Hazardous Materials':'☣','Equipment Operation':'⚙️','Emergency Response':'🚨','PPE & Safety':'🦺','Legal & Compliance':'⚖️','Risk Assessment':'📋'};
+  document.getElementById('dtab-training').innerHTML=tRecs.length?tRecs.map(t=>{const st=tStatus(t.expiry_date);return `<div class="training-item"><div class="training-icon">${catIcons[t.category]||'📋'}</div><div><div class="training-name">${t.competency_name}</div><div class="training-meta">${t.category} · ${t.provider||'No provider'} · Ref: ${t.cert_number||'—'}</div></div><div class="training-status">${STATUS_BADGE[st]}<div class="training-expiry">Done: ${fmt(t.date_completed)}<br>${t.expiry_date?'Expires: '+fmt(t.expiry_date):'Permanent'}</div></div></div>`;}).join(''):`<div class="empty-state"><div class="empty-icon">🎓</div><div class="empty-title">No training records</div></div>`;
+
+  // Compliance tab
+  const mandatory=cache.competencies.filter(c=>c.mandatory==='yes');
+  let ok=0,exp=0,warn=0;
+  const compRows=mandatory.map(c=>{
+    const rec=cache.training.find(t=>t.staff_id===id&&t.competency_id===c.id);
+    let badge,note;
+    if(!rec){badge='<span class="badge badge-red">Not Recorded</span>';note='No record';exp++;}
+    else{const st=tStatus(rec.expiry_date);badge=STATUS_BADGE[st];note=rec.expiry_date?'Expires '+fmt(rec.expiry_date):'Permanent';if(st==='current')ok++;else if(st==='expiring')warn++;else exp++;}
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><div style="font-size:12px;font-weight:600">${c.name}</div><div style="font-size:11px;color:var(--text-dim)">${note}</div></div>${badge}</div>`;
+  }).join('');
+  const pct=mandatory.length?Math.round((ok/mandatory.length)*100):100;
+  const pctColor=pct>=90?'var(--green)':pct>=60?'var(--yellow)':'var(--red)';
+  document.getElementById('dtab-compliance').innerHTML=`<div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;padding:16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)"><div style="font-size:40px;font-weight:800;color:${pctColor};font-family:'DM Serif Display',serif">${pct}%</div><div><div style="font-size:14px;font-weight:700;margin-bottom:4px">Overall Compliance</div><div style="font-size:12px;color:var(--text-dim)">${ok} current · ${warn} expiring · ${exp} expired/missing of ${mandatory.length} mandatory</div></div></div>${compRows}`;
+
+  // Medical tab
+  const mRecs=cache.medicals.filter(m=>m.staff_id===id).sort((a,b)=>new Date(b.exam_date)-new Date(a.exam_date));
+  const latest=mRecs[0];
+  document.getElementById('dtab-medical').innerHTML=latest?`
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase">Latest — ${latest.exam_type}</div>
+      <div class="info-grid">
+        <div><div class="info-label">Exam Date</div><div class="info-value">${fmt(latest.exam_date)}</div></div>
+        <div><div class="info-label">Expiry</div><div class="info-value">${fmt(latest.expiry_date)}</div></div>
+        <div><div class="info-label">Outcome</div><div class="info-value"><span class="badge ${OUTCOME_BADGE[latest.outcome]}">${OUTCOME_LABEL[latest.outcome]}</span></div></div>
+        <div><div class="info-label">Status</div><div class="info-value">${STATUS_BADGE[mStatus(latest.expiry_date)]}</div></div>
+        <div><div class="info-label">Doctor / Clinic</div><div class="info-value">${latest.doctor||'—'}</div></div>
+        <div><div class="info-label">Certificate</div><div class="info-value" style="font-family:'IBM Plex Mono',monospace;font-size:11px">${latest.cert_number||'—'}</div></div>
+      </div>${latest.notes?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text-dim)">📋 ${latest.notes}</div>`:''}
+    </div>
+    ${mRecs.length>1?`<div style="font-size:12px;font-weight:700;margin-bottom:8px">All Medicals (${mRecs.length})</div>${mRecs.map(m=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><div style="font-size:12px;font-weight:600">${m.exam_type}</div><div style="font-size:11px;color:var(--text-dim)">${m.doctor||'—'} · ${fmt(m.exam_date)}</div></div><span class="badge ${OUTCOME_BADGE[m.outcome]}">${OUTCOME_LABEL[m.outcome]}</span>${STATUS_BADGE[mStatus(m.expiry_date)]}</div>`).join('')}`:''}
+  `:`<div class="empty-state"><div class="empty-icon">🏥</div><div class="empty-title">No medical records</div><div class="empty-sub"><button class="btn btn-primary" onclick="openAddMedical(${id});closeModal('modal-detail')">Log Medical Now</button></div></div>`;
+
+  // Reset tabs
+  document.querySelectorAll('.detail-tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.detail-tab')[0].classList.add('active');
+  ['dtab-personal','dtab-training','dtab-compliance','dtab-medical'].forEach((t,i)=>document.getElementById(t).style.display=i===0?'block':'none');
+
+  // Footer actions
+  document.getElementById('detail-footer').innerHTML=`
+    <button class="btn btn-ghost" onclick="openEditStaff(${s.id});closeModal('modal-detail')">✏️ Edit Details</button>
+    ${s.active
+      ? `<button class="btn btn-warning" onclick="openOffboard(${s.id});closeModal('modal-detail')">🚪 Offboard</button>`
+      : `<button class="btn btn-ghost" onclick="reactivateStaff(${s.id},'${s.fname} ${s.lname}');closeModal('modal-detail')">↩ Reactivate</button>`}
+    <button class="btn btn-primary" onclick="openAddTraining();setTimeout(()=>{document.getElementById('tr-staff').value=${id}},100);closeModal('modal-detail')">＋ Log Training</button>
+    <button class="btn btn-primary" onclick="openAddMedical(${id});closeModal('modal-detail')">＋ Log Medical</button>
+    <button class="btn btn-danger" onclick="deleteStaff(${s.id},'${s.fname} ${s.lname}');closeModal('modal-detail')">🗑 Delete</button>`;
+
+  openModal('modal-detail');
+}
+
+function switchDetailTab(tab,el){
+  document.querySelectorAll('.detail-tab').forEach(x=>x.classList.remove('active')); el.classList.add('active');
+  ['dtab-personal','dtab-training','dtab-compliance','dtab-medical'].forEach(t=>document.getElementById(t).style.display='none');
+  document.getElementById('dtab-'+tab).style.display='block';
+}
+
+// ── OFFBOARDING LOGIC ──────────────────────────────────────
+function openOffboard(id) {
+  const s=cache.staff.find(x=>x.id===id); if(!s) return;
+  offboardTarget=id;
+  document.getElementById('offboard-sub').textContent=`${s.fname} ${s.lname} (${s.eid})`;
+  document.getElementById('ob-reason').value='';
+  document.getElementById('ob-date').value=today();
+  document.getElementById('ob-notes').value='';
+  ['ob-chk1','ob-chk2','ob-chk3','ob-chk4','ob-chk5'].forEach(id=>document.getElementById(id).checked=false);
+  openModal('modal-offboard');
+}
+async function confirmOffboard() {
+  const reason=document.getElementById('ob-reason').value;
+  const date=document.getElementById('ob-date').value;
+  if(!reason||!date){showToast('Select a reason and last working day','⚠️');return;}
+  try {
+    setSyncing(true);
+    await sb.from('staff').update({active:false, offboard_date:date, offboard_reason:reason, offboard_notes:document.getElementById('ob-notes').value}).eq('id',offboardTarget);
+    await sb.from('activity_log').insert({staff_id:offboardTarget, action:'Staff Offboarded', item:reason, status:'inactive', performed_by:currentUser.id});
+    await loadAll(); closeModal('modal-offboard');
+    renderView(currentView); setSyncing(false);
+    showToast('Staff member offboarded — records retained','🚪');
+  } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+async function reactivateStaff(id,name) {
+  if(!confirm(`Reactivate ${name}? They will appear in all compliance checks again.`)) return;
+  try {
+    setSyncing(true);
+    await sb.from('staff').update({active:true, offboard_date:null, offboard_reason:null}).eq('id',id);
+    await sb.from('activity_log').insert({staff_id:id, action:'Staff Reactivated', item:'Account reinstated', status:'active', performed_by:currentUser.id});
+    await loadAll(); renderView(currentView); setSyncing(false);
+    showToast(`${name} reactivated`,'✅');
+  } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+
+// ── CRUD: STAFF ────────────────────────────────────────────
+function openAddStaff() {
+  ['sf-fname','sf-lname','sf-eid','sf-email','sf-phone','sf-role','sf-address','sf-emerg','sf-emerg-phone','sf-pants'].forEach(i=>{ const el=document.getElementById(i); if(el) el.value=''; });
+  document.getElementById('sf-dept').innerHTML='<option value="">— Select —</option>'+cache.departments.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  openModal('modal-staff');
+}
+async function saveStaff() {
+  const fname=document.getElementById('sf-fname').value.trim(), lname=document.getElementById('sf-lname').value.trim(), eid=document.getElementById('sf-eid').value.trim(), dept=document.getElementById('sf-dept').value;
+  if(!fname||!lname||!eid||!dept){showToast('First name, last name, employee ID and department are required','⚠️');return;}
+  try {
+    setSyncing(true);
+    const {data,error}=await sb.from('staff').insert({fname,lname,eid,dob:document.getElementById('sf-dob').value||null,email:document.getElementById('sf-email').value||null,phone:document.getElementById('sf-phone').value||null,dept_id:parseInt(dept),role:document.getElementById('sf-role').value||'Employee',emptype:document.getElementById('sf-emptype').value,start_date:document.getElementById('sf-start').value||null,address:document.getElementById('sf-address').value||null,emerg_contact:document.getElementById('sf-emerg').value||null,emerg_phone:document.getElementById('sf-emerg-phone').value||null,top_size:document.getElementById('sf-top').value||null,pants_size:document.getElementById('sf-pants').value||null,active:true}).select().single();
+    if(error) throw error;
+    await sb.from('activity_log').insert({staff_id:data.id,action:'Staff Added',item:`${fname} ${lname}`,status:'active',performed_by:currentUser.id});
+    await loadAll(); closeModal('modal-staff'); renderView(currentView); setSyncing(false);
+    showToast(`${fname} ${lname} added successfully`,'✅');
+  } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+
+// ── EDIT STAFF ─────────────────────────────────────────────
+let editStaffId = null;
+function openEditStaff(id) {
+  const s = cache.staff.find(x=>x.id===id);
+  if(!s) return;
+  editStaffId = id;
+  document.getElementById('edit-staff-sub').textContent = `${s.fname} ${s.lname} (${s.eid})`;
+  document.getElementById('es-fname').value  = s.fname || '';
+  document.getElementById('es-lname').value  = s.lname || '';
+  document.getElementById('es-eid').value    = s.eid   || '';
+  document.getElementById('es-dob').value    = s.dob   ? s.dob.split('T')[0] : '';
+  document.getElementById('es-email').value  = s.email || '';
+  document.getElementById('es-phone').value  = s.phone || '';
+  document.getElementById('es-role').value   = s.role  || '';
+  document.getElementById('es-start').value  = s.start_date ? s.start_date.split('T')[0] : '';
+  document.getElementById('es-top').value    = s.top_size   || '';
+  document.getElementById('es-pants').value  = s.pants_size || '';
+  document.getElementById('es-address').value     = s.address       || '';
+  document.getElementById('es-emerg').value       = s.emerg_contact || '';
+  document.getElementById('es-emerg-phone').value = s.emerg_phone   || '';
+  // Populate dept select
+  document.getElementById('es-dept').innerHTML = cache.departments.map(d=>`<option value="${d.id}" ${d.id===s.dept_id?'selected':''}>${d.name}</option>`).join('');
+  // Set emptype
+  const et = document.getElementById('es-emptype');
+  for(let i=0;i<et.options.length;i++) if(et.options[i].value===s.emptype) et.selectedIndex=i;
+  openModal('modal-edit-staff');
+}
+
+async function saveEditStaff() {
+  const fname = document.getElementById('es-fname').value.trim();
+  const lname = document.getElementById('es-lname').value.trim();
+  if(!fname||!lname){showToast('First and last name are required','⚠️');return;}
+  try {
+    setSyncing(true);
+    const updates = {
+      fname,
+      lname,
+      dob:           document.getElementById('es-dob').value   || null,
+      email:         document.getElementById('es-email').value || null,
+      phone:         document.getElementById('es-phone').value || null,
+      dept_id:       parseInt(document.getElementById('es-dept').value),
+      role:          document.getElementById('es-role').value  || 'Employee',
+      emptype:       document.getElementById('es-emptype').value,
+      start_date:    document.getElementById('es-start').value || null,
+      top_size:      document.getElementById('es-top').value   || null,
+      pants_size:    document.getElementById('es-pants').value || null,
+      address:       document.getElementById('es-address').value       || null,
+      emerg_contact: document.getElementById('es-emerg').value         || null,
+      emerg_phone:   document.getElementById('es-emerg-phone').value   || null,
+      updated_at:    new Date().toISOString()
+    };
+    const { error } = await sb.from('staff').update(updates).eq('id', editStaffId);
+    if(error) throw error;
+    await sb.from('activity_log').insert({staff_id:editStaffId, action:'Staff Details Updated', item:`${fname} ${lname}`, status:'active', performed_by:currentUser.id});
+    await loadAll();
+    closeModal('modal-edit-staff');
+    renderView(currentView);
+    setSyncing(false);
+    showToast(`${fname} ${lname} updated successfully`,'✅');
+  } catch(e){ setSyncing(false); showToast(e.message,'❌'); }
+}
+async function deleteStaff(id,name) {
+  if(!confirm(`PERMANENTLY delete ${name}?\n\nThis will remove ALL their training and medical records.\nThis cannot be undone. Consider using Offboarding instead.`)) return;
+  try {
+    setSyncing(true);
+    await sb.from('staff').delete().eq('id',id);
+    await loadAll(); renderView(currentView); setSyncing(false);
+    showToast(`${name} permanently deleted`,'🗑');
+  } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+
+// ── CRUD: TRAINING ─────────────────────────────────────────
+function openAddTraining() {
+  document.getElementById('tr-staff').innerHTML=cache.staff.filter(s=>s.active).map(s=>`<option value="${s.id}">${s.fname} ${s.lname} (${s.eid})</option>`).join('');
+  document.getElementById('tr-comp').innerHTML=cache.competencies.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  ['tr-date','tr-expiry','tr-provider','tr-cert','tr-notes'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('tr-date').value=today();
+  openModal('modal-training');
+}
+async function saveTraining() {
+  const sid=document.getElementById('tr-staff').value, cid=document.getElementById('tr-comp').value, date=document.getElementById('tr-date').value;
+  if(!sid||!cid||!date){showToast('Staff, competency and date are required','⚠️');return;}
+  try {
+    setSyncing(true);
+    const comp=cache.competencies.find(c=>c.id===parseInt(cid));
+    await sb.from('training_records').insert({staff_id:parseInt(sid),competency_id:parseInt(cid),date_completed:date,expiry_date:document.getElementById('tr-expiry').value||null,provider:document.getElementById('tr-provider').value||null,cert_number:document.getElementById('tr-cert').value||null,notes:document.getElementById('tr-notes').value||null,created_by:currentUser.id});
+    await sb.from('activity_log').insert({staff_id:parseInt(sid),action:'Training Logged',item:comp?.name||'—',status:'current',performed_by:currentUser.id});
+    await loadAll(); closeModal('modal-training'); renderView(currentView); setSyncing(false);
+    showToast('Training record saved to database','🎓');
+  } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+async function deleteTraining(id) {
+  if(!confirm('Remove this training record from the database?')) return;
+  try { setSyncing(true); await sb.from('training_records').delete().eq('id',id); await loadAll(); renderTraining('all'); setSyncing(false); showToast('Training record removed','🗑'); } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+
+// ── CRUD: MEDICALS ─────────────────────────────────────────
+function openAddMedical(preselect) {
+  document.getElementById('med-staff').innerHTML=cache.staff.filter(s=>s.active).map(s=>`<option value="${s.id}">${s.fname} ${s.lname} (${s.eid})</option>`).join('');
+  if(preselect) document.getElementById('med-staff').value=preselect;
+  ['med-date','med-expiry','med-doctor','med-cert','med-notes'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('med-date').value=today();
+  const exp=new Date(); exp.setFullYear(exp.getFullYear()+1);
+  document.getElementById('med-expiry').value=exp.toISOString().split('T')[0];
+  openModal('modal-medical');
+}
+async function saveMedical() {
+  const sid=document.getElementById('med-staff').value, date=document.getElementById('med-date').value, expiry=document.getElementById('med-expiry').value;
+  if(!sid||!date||!expiry){showToast('Staff, exam date and expiry are required','⚠️');return;}
+  try {
+    setSyncing(true);
+    await sb.from('medicals').insert({staff_id:parseInt(sid),exam_type:document.getElementById('med-type').value,outcome:document.getElementById('med-outcome').value,exam_date:date,expiry_date:expiry,doctor:document.getElementById('med-doctor').value||null,cert_number:document.getElementById('med-cert').value||null,notes:document.getElementById('med-notes').value||null,created_by:currentUser.id});
+    await sb.from('activity_log').insert({staff_id:parseInt(sid),action:'Medical Logged',item:document.getElementById('med-type').value,status:document.getElementById('med-outcome').value,performed_by:currentUser.id});
+    await loadAll(); closeModal('modal-medical'); renderView(currentView); setSyncing(false);
+    showToast('Medical record saved to database','🏥');
+  } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+async function deleteMedical(id) {
+  if(!confirm('Remove this medical record from the database?')) return;
+  try { setSyncing(true); await sb.from('medicals').delete().eq('id',id); await loadAll(); renderMedicals('all'); setSyncing(false); showToast('Medical record removed','🗑'); } catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+
+// ── CRUD: COMPETENCIES ─────────────────────────────────────
+function openAddComp(){['cp-name','cp-desc'].forEach(i=>document.getElementById(i).value='');document.getElementById('cp-validity').value='12';openModal('modal-comp');}
+async function saveComp(){
+  const name=document.getElementById('cp-name').value.trim(); if(!name){showToast('Enter a name','⚠️');return;}
+  try{setSyncing(true);await sb.from('competencies').insert({name,category:document.getElementById('cp-cat').value,validity_months:parseInt(document.getElementById('cp-validity').value)||12,mandatory:document.getElementById('cp-mandatory').value,renewal_method:document.getElementById('cp-renewal').value,description:document.getElementById('cp-desc').value||null});await loadAll();closeModal('modal-comp');renderComps();setSyncing(false);showToast(`"${name}" added`,'✅');}catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+async function deleteComp(id){
+  if(!confirm('Remove competency? Linked training records will also be deleted.'))return;
+  try{setSyncing(true);await sb.from('competencies').delete().eq('id',id);await loadAll();renderComps();setSyncing(false);showToast('Removed','🗑');}catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+
+// ── CRUD: DEPARTMENTS ──────────────────────────────────────
+function openAddDept(){['dp-name','dp-head','dp-loc'].forEach(i=>document.getElementById(i).value='');openModal('modal-dept');}
+async function saveDept(){
+  const name=document.getElementById('dp-name').value.trim(); if(!name){showToast('Enter a name','⚠️');return;}
+  try{setSyncing(true);await sb.from('departments').insert({name,head:document.getElementById('dp-head').value||null,location:document.getElementById('dp-loc').value||null});await loadAll();closeModal('modal-dept');renderDepts();setSyncing(false);showToast(`"${name}" added`,'✅');}catch(e){setSyncing(false);showToast(e.message,'❌');}
+}
+
+// ── CRUD: USERS ────────────────────────────────────────────
+function openAddUser(){['usr-name','usr-email','usr-password'].forEach(i=>document.getElementById(i).value='');openModal('modal-user');}
+async function saveUser(){
+  const name=document.getElementById('usr-name').value.trim(), email=document.getElementById('usr-email').value.trim(), pass=document.getElementById('usr-password').value, role=document.getElementById('usr-role').value;
+  if(!name||!email||!pass){showToast('All fields required','⚠️');return;}
+  if(pass.length<8){showToast('Password must be at least 8 characters','⚠️');return;}
+  try{
+    setSyncing(true);
+    const{data,error}=await sb.auth.admin.createUser({email,password:pass,email_confirm:true});
+    if(error)throw error;
+    await sb.from('user_profiles').insert({id:data.user.id,full_name:name,email,role,active:true});
+    closeModal('modal-user');renderAdmin();setSyncing(false);
+    showToast(`Account created for ${name}`,'✅');
+  }catch(e){setSyncing(false);showToast('Note: Use Supabase dashboard to create users, or enable admin API. Error: '+e.message,'⚠️');}
+}
+async function deactivateUser(id,name){
+  if(!confirm(`Deactivate ${name}? They will no longer be able to log in.`))return;
+  try{await sb.from('user_profiles').update({active:false}).eq('id',id);renderAdmin();showToast(`${name} deactivated`,'🚫');}catch(e){showToast(e.message,'❌');}
+}
+
+// ── MODALS ─────────────────────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.open').forEach(el=>el.classList.remove('open'));});
+
+function handleSearch(q){if(currentView==='staff')renderStaff(staffFilt);}
+
+// ── INIT ───────────────────────────────────────────────────
+(async()=>{
+  initSupabase();
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){
+    currentUser = session.user;
+    await loadUserRole();
+    await showApp();
+  } else {
+    document.getElementById('login-screen').style.display='flex';
+  }
+  document.getElementById('login-password').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+})();
+</script>
+</body>
+</html>

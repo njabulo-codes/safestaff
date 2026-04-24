@@ -379,6 +379,57 @@ tbody td { padding:14px 16px; font-size:13px; }
 .days-badge.good { background:var(--green-bg); color:var(--green); }
 .days-badge.warn { background:var(--yellow-bg); color:var(--yellow); }
 .days-badge.bad { background:var(--red-bg); color:var(--red); }
+
+/* ═══════════════════════════════
+   REPORTS CARDS
+═══════════════════════════════ */
+.report-card { background:rgba(var(--surface-rgb),.95); border:1px solid var(--border); border-radius:var(--r-lg); padding:24px; cursor:pointer; transition:all .2s; display:flex; flex-direction:column; gap:10px; }
+.report-card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:var(--shadow-md); }
+.report-card-icon { font-size:32px; }
+.report-card-title { font-size:15px; font-weight:700; letter-spacing:-.3px; }
+.report-card-desc { font-size:12px; color:var(--text-dim); flex:1; line-height:1.6; }
+
+/* ═══════════════════════════════
+   SEVERITY BADGES
+═══════════════════════════════ */
+.badge-critical { background:rgba(255,79,123,.15); color:#ff4f7b; border:1px solid rgba(255,79,123,.25); }
+.badge-high     { background:rgba(240,122,74,.15); color:#f07a4a; border:1px solid rgba(240,122,74,.25); }
+.badge-medium   { background:var(--yellow-bg); color:var(--yellow); border:1px solid rgba(249,195,58,.25); }
+.badge-low      { background:var(--blue-bg); color:var(--blue); border:1px solid rgba(94,166,252,.25); }
+
+/* ═══════════════════════════════
+   ATTENDEE MULTI-SELECT
+═══════════════════════════════ */
+.attendee-select-wrap { border:1.5px solid var(--border2); border-radius:var(--r-sm); overflow:hidden; }
+.attendee-search { width:100%; background:var(--surface2); border:none; border-bottom:1px solid var(--border); padding:8px 12px; font-family:'Inter',sans-serif; font-size:13px; color:var(--text); outline:none; }
+.attendee-search:focus { border-bottom-color:var(--accent); }
+.attendee-list { max-height:200px; overflow-y:auto; padding:4px; }
+.attendee-item { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:var(--r-xs); cursor:pointer; transition:background .1s; font-size:12px; }
+.attendee-item:hover { background:var(--surface2); }
+.attendee-item input[type=checkbox] { width:14px; height:14px; accent-color:var(--accent); flex-shrink:0; }
+
+/* ═══════════════════════════════
+   REPORT MODAL / PRINT
+═══════════════════════════════ */
+.report-modal { width:1000px; }
+.report-table-wrap { overflow-x:auto; margin-top:14px; }
+.report-table { width:100%; border-collapse:collapse; font-size:12px; }
+.report-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); border-bottom:2px solid var(--border2); }
+.report-table td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+.report-table tr:hover td { background:var(--surface2); }
+
+/* PRINT STYLES */
+@media print {
+  .sidebar, .topbar, .modal-close, .modal-footer, .report-actions-bar { display:none !important; }
+  body { background:#fff !important; color:#000 !important; }
+  .modal-overlay { position:static !important; background:none !important; backdrop-filter:none !important; }
+  .modal { box-shadow:none !important; border:none !important; width:100% !important; max-height:none !important; animation:none !important; }
+  .report-table th { background:#f5f5f5 !important; color:#333 !important; }
+  .report-table td { color:#000 !important; }
+  .print-header { display:flex !important; justify-content:space-between; margin-bottom:20px; padding-bottom:10px; border-bottom:2px solid #333; }
+  .badge { border:1px solid #999 !important; color:#333 !important; background:#f5f5f5 !important; }
+}
+@media screen { .print-header { display:none; } }
 </style>
 </head>
 <body>
@@ -432,7 +483,10 @@ tbody td { padding:14px 16px; font-size:13px; }
       <div class="nav-item" onclick="switchView('medicals',this)"><span class="nav-icon">🏥</span> Medical Records <span class="nav-badge" id="med-badge" style="display:none">!</span></div>
       <div class="nav-item" onclick="switchView('alerts',this)"><span class="nav-icon">🔔</span> Alerts <span class="nav-badge" id="alert-badge" style="display:none">!</span></div>
       <div class="nav-item" onclick="switchView('sites',this)"><span class="nav-icon">🏗</span> Sites & Inductions <span class="nav-badge" id="sites-badge" style="display:none">!</span></div>
+      <div class="nav-item" onclick="switchView('incidents',this)"><span class="nav-icon">⚠️</span> Incidents <span class="nav-badge" id="incident-badge" style="display:none">!</span></div>
+      <div class="nav-item" onclick="switchView('toolbox',this)"><span class="nav-icon">🗣</span> Toolbox Talks</div>
       <div class="nav-section-label">Reports</div>
+      <div class="nav-item" onclick="switchView('reports',this)"><span class="nav-icon">📊</span> Reports</div>
       <div class="nav-item" onclick="switchView('matrix',this)"><span class="nav-icon">⬛</span> Skills Matrix</div>
       <div class="nav-section-label">Administration</div>
       <div class="nav-item admin-only" onclick="switchView('admin',this)"><span class="nav-icon">⚙️</span> Admin Panel</div>
@@ -625,6 +679,54 @@ tbody td { padding:14px 16px; font-size:13px; }
         </div>
       </div>
 
+
+      <!-- INCIDENTS -->
+      <div class="view" id="view-incidents">
+        <div class="section-header">
+          <div class="section-title">Incident &amp; Hazard Register</div>
+          <div class="section-count" id="incident-count-lbl">—</div>
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterIncidents('all',this)">All</button>
+            <button class="filter-tab" onclick="filterIncidents('Open',this)">Open</button>
+            <button class="filter-tab" onclick="filterIncidents('Investigating',this)">Investigating</button>
+            <button class="filter-tab" onclick="filterIncidents('Closed',this)">Closed</button>
+            <button class="filter-tab" onclick="filterIncidents('Near-Miss',this)">Near-Miss</button>
+          </div>
+          <button class="btn btn-primary" style="margin-left:8px" onclick="openAddIncident()">＋ Log Incident</button>
+        </div>
+        <div class="stats-row" id="incident-stats-row"></div>
+        <div class="table-wrap table-scroll"><table>
+          <thead><tr><th>Date &amp; Time</th><th>Type</th><th>Location</th><th>Severity</th><th>Reported By</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="incident-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <!-- TOOLBOX TALKS -->
+      <div class="view" id="view-toolbox">
+        <div class="section-header">
+          <div class="section-title">Toolbox Talk Log</div>
+          <div class="section-count" id="toolbox-count-lbl">—</div>
+          <button class="btn btn-primary" style="margin-left:auto" onclick="openAddToolbox()">＋ Log Toolbox Talk</button>
+        </div>
+        <div class="table-wrap table-scroll"><table>
+          <thead><tr><th>Date</th><th>Topic</th><th>Category</th><th>Facilitator</th><th>Attendees</th><th>Duration</th><th>Actions</th></tr></thead>
+          <tbody id="toolbox-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <!-- REPORTS -->
+      <div class="view" id="view-reports">
+        <div class="section-header"><div class="section-title">Reports &amp; Export</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" id="report-cards">
+          <div class="report-card" onclick="generateReport('compliance')"><div class="report-card-icon">📋</div><div class="report-card-title">Staff Compliance Summary</div><div class="report-card-desc">All active staff with training &amp; medical status and overall compliance %</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
+          <div class="report-card" onclick="openExpiryReport()"><div class="report-card-icon">⏳</div><div class="report-card-title">Expiring Certifications</div><div class="report-card-desc">Training and medicals expiring within 30, 60, or 90 days</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
+          <div class="report-card" onclick="generateReport('sites')"><div class="report-card-icon">🏗</div><div class="report-card-title">Site Induction Status</div><div class="report-card-desc">Per-site: who is inducted, who has expired, who is not inducted</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
+          <div class="report-card" onclick="generateReport('medical')"><div class="report-card-icon">🏥</div><div class="report-card-title">Medical Fitness Roster</div><div class="report-card-desc">All staff with current medical outcome, doctor, and expiry date</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
+          <div class="report-card" onclick="generateReport('activity')"><div class="report-card-icon">📜</div><div class="report-card-title">Full Activity Log</div><div class="report-card-desc">Chronological log of all system actions for audit and compliance</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
+          <div class="report-card" onclick="generateReport('incidents')"><div class="report-card-icon">⚠️</div><div class="report-card-title">Incident Register Export</div><div class="report-card-desc">Complete incident and hazard register with status and corrective actions</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
+        </div>
+      </div>
+
     </div><!-- /content -->
   </div><!-- /main -->
 </div><!-- /app -->
@@ -644,7 +746,7 @@ tbody td { padding:14px 16px; font-size:13px; }
         <div class="photo-preview-circle" id="staff-photo-preview"><span>📷</span></div>
         <div>
           <div style="font-size:13px;font-weight:600;margin-bottom:4px">Profile Photo</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">JPG/PNG — max 200 KB recommended</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">JPG/PNG — max 4 MB</div>
           <label class="btn btn-ghost btn-sm" style="cursor:pointer">
             Upload Photo <input type="file" id="staff-photo-input" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)">
           </label>
@@ -890,6 +992,100 @@ tbody td { padding:14px 16px; font-size:13px; }
 </div>
 
 <!-- TOAST -->
+<!-- ADD/EDIT INCIDENT -->
+<div class="modal-overlay" id="modal-incident">
+  <div class="modal modal-wide">
+    <div class="modal-header"><div><div class="modal-title" id="modal-incident-title">Log Incident / Hazard</div><div class="modal-sub">All fields marked * are required</div></div><div class="modal-close" onclick="closeModal('modal-incident')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Incident Type *</label><select class="form-select" id="inc-type"><option>Injury</option><option>Near-Miss</option><option>Property Damage</option><option>Environmental</option><option>Hazard Identified</option><option>Other</option></select></div>
+        <div class="form-group"><label class="form-label">Severity *</label><select class="form-select" id="inc-severity"><option value="Critical">Critical</option><option value="High">High</option><option value="Medium" selected>Medium</option><option value="Low">Low</option></select></div>
+        <div class="form-group"><label class="form-label">Date &amp; Time *</label><input class="form-input" id="inc-datetime" type="datetime-local"></div>
+        <div class="form-group"><label class="form-label">Status *</label><select class="form-select" id="inc-status" onchange="toggleIncidentFields()"><option value="Open">Open</option><option value="Investigating">Investigating</option><option value="Closed">Closed</option></select></div>
+        <div class="form-group"><label class="form-label">Location / Site *</label><input class="form-input" id="inc-location" placeholder="e.g. Workshop Bay 2, ACME Plant A"></div>
+        <div class="form-group"><label class="form-label">Witnesses</label><input class="form-input" id="inc-witnesses" placeholder="Names of witnesses"></div>
+        <div class="form-group span2"><label class="form-label">Staff Involved</label><div class="attendee-select-wrap"><input class="attendee-search" id="inc-staff-search" placeholder="Search staff…" oninput="filterAttendees('inc-staff-list',this.value)"><div class="attendee-list" id="inc-staff-list"></div></div></div>
+        <div class="form-group span2"><label class="form-label">Description *</label><textarea class="form-input" id="inc-desc" rows="3" placeholder="Describe what happened, where, and how…" style="resize:vertical"></textarea></div>
+        <div class="form-group span2"><label class="form-label">Immediate Action Taken</label><textarea class="form-input" id="inc-action" rows="2" placeholder="What was done immediately after the incident…" style="resize:vertical"></textarea></div>
+        <div class="form-group span2" id="inc-corrective-wrap" style="display:none"><label class="form-label">Corrective Action</label><textarea class="form-input" id="inc-corrective" rows="2" placeholder="Root cause analysis and corrective actions planned/taken…" style="resize:vertical"></textarea></div>
+        <div class="form-group" id="inc-closure-wrap" style="display:none"><label class="form-label">Closure Date</label><input class="form-input" id="inc-closure" type="date"></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-incident')">Cancel</button><button class="btn btn-primary" onclick="saveIncident()">Save Incident</button></div>
+  </div>
+</div>
+
+<!-- VIEW INCIDENT DETAIL -->
+<div class="modal-overlay" id="modal-incident-view">
+  <div class="modal modal-wide">
+    <div class="modal-header"><div><div class="modal-title" id="inc-view-title">Incident Detail</div><div class="modal-sub" id="inc-view-sub"></div></div><div class="modal-close" onclick="closeModal('modal-incident-view')">✕</div></div>
+    <div class="modal-body" id="inc-view-body"></div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-incident-view')">Close</button></div>
+  </div>
+</div>
+
+<!-- ADD/EDIT TOOLBOX TALK -->
+<div class="modal-overlay" id="modal-toolbox">
+  <div class="modal modal-wide">
+    <div class="modal-header"><div><div class="modal-title" id="modal-toolbox-title">Log Toolbox Talk</div></div><div class="modal-close" onclick="closeModal('modal-toolbox')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Date *</label><input class="form-input" id="tb-date" type="date"></div>
+        <div class="form-group"><label class="form-label">Category</label><select class="form-select" id="tb-cat"><option>General Safety</option><option>Fire Safety</option><option>Chemical Handling</option><option>PPE</option><option>Emergency Procedures</option><option>Equipment</option><option>Environmental</option><option>Other</option></select></div>
+        <div class="form-group span2"><label class="form-label">Topic *</label><input class="form-input" id="tb-topic" placeholder="e.g. Safe use of angle grinders"></div>
+        <div class="form-group"><label class="form-label">Facilitator *</label><input class="form-input" id="tb-facilitator"></div>
+        <div class="form-group"><label class="form-label">Duration (minutes)</label><input class="form-input" id="tb-duration" type="number" placeholder="15"></div>
+        <div class="form-group span2"><label class="form-label">Attendees</label><div class="attendee-select-wrap"><input class="attendee-search" id="tb-staff-search" placeholder="Search staff…" oninput="filterAttendees('tb-staff-list',this.value)"><div class="attendee-list" id="tb-staff-list"></div></div></div>
+        <div class="form-group span2"><label class="form-label">Key Points Discussed</label><textarea class="form-input" id="tb-points" rows="3" placeholder="Summarise the main safety points covered…" style="resize:vertical"></textarea></div>
+        <div class="form-group span2"><label class="form-label">Actions Arising</label><textarea class="form-input" id="tb-actions" rows="2" placeholder="Any follow-up actions identified…" style="resize:vertical"></textarea></div>
+        <div class="form-group span2"><label class="form-label" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="tb-signoff" style="width:16px;height:16px;accent-color:var(--accent)"> All attendees verbally confirmed understanding</label></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-toolbox')">Cancel</button><button class="btn btn-primary" onclick="saveToolbox()">Save Talk</button></div>
+  </div>
+</div>
+
+<!-- VIEW TOOLBOX DETAIL -->
+<div class="modal-overlay" id="modal-toolbox-view">
+  <div class="modal modal-wide">
+    <div class="modal-header"><div><div class="modal-title" id="tb-view-title">Toolbox Talk Detail</div><div class="modal-sub" id="tb-view-sub"></div></div><div class="modal-close" onclick="closeModal('modal-toolbox-view')">✕</div></div>
+    <div class="modal-body" id="tb-view-body"></div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-toolbox-view')">Close</button></div>
+  </div>
+</div>
+
+<!-- REPORT VIEWER -->
+<div class="modal-overlay" id="modal-report">
+  <div class="modal report-modal">
+    <div class="modal-header">
+      <div><div class="modal-title" id="report-modal-title">Report</div><div class="modal-sub" id="report-modal-sub"></div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="exportReportCSV()">⬇ Export CSV</button>
+        <button class="btn btn-primary btn-sm" onclick="window.print()">🖨 Print / Save PDF</button>
+        <div class="modal-close" onclick="closeModal('modal-report')">✕</div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="print-header"><div style="font-size:18px;font-weight:800">🛡 SafeStaff OHS</div><div style="text-align:right"><div id="print-report-title" style="font-weight:700"></div><div style="font-size:11px;color:#666" id="print-report-date"></div></div></div>
+      <div id="report-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPIRY RANGE PICKER -->
+<div class="modal-overlay" id="modal-expiry-range">
+  <div class="modal" style="width:360px">
+    <div class="modal-header"><div><div class="modal-title">Expiring Certifications</div><div class="modal-sub">Select timeframe</div></div><div class="modal-close" onclick="closeModal('modal-expiry-range')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-grid full">
+        <div class="form-group"><label class="form-label">Show records expiring within</label><select class="form-select" id="expiry-range"><option value="30">30 days</option><option value="60" selected>60 days</option><option value="90">90 days</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-expiry-range')">Cancel</button><button class="btn btn-primary" onclick="generateExpiryReport()">Generate</button></div>
+  </div>
+</div>
+
+
 <div class="toast" id="toast"><span id="toast-icon">✅</span> <span id="toast-msg"></span></div>
 
 <!-- ══ SCRIPT ════════════════════════════════════════════════ -->
@@ -1406,7 +1602,7 @@ function switchDetailTab(tab,el){
 // ── PHOTO HANDLING ────────────────────────────────────────
 function handlePhotoSelect(inp){
   const file=inp.files[0]; if(!file) return;
-  if(file.size>1024*200){ showToast('Image too large — please use under 200KB','⚠️'); inp.value=''; return; }
+  if(file.size>1024*1024*4){ showToast('Image too large — please use under 4MB','⚠️'); inp.value=''; return; }
   const reader=new FileReader();
   reader.onload=e=>{ pendingPhotoB64=e.target.result; document.getElementById('staff-photo-preview').innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`; };
   reader.readAsDataURL(file);
@@ -1789,8 +1985,19 @@ async function saveDocument(){
   }catch(e){setSyncing(false);showToast(e.message,'❌');}
 }
 function viewDocument(id){
-  const doc=cache.documents.find(d=>d.id==id||d.id===parseInt(id)); if(!doc){showToast('Document not found','⚠️');return;}
-  const win=window.open(); win.document.write(`<html><head><title>${doc.title}</title></head><body style="margin:0;background:#111"><iframe src="${doc.file_base64}" style="width:100%;height:100vh;border:none"></iframe></body></html>`);
+  const doc=cache.documents.find(d=>d.id==id||d.id===parseInt(id)); if(!doc){showToast('Document not found','\u26a0\ufe0f');return;}
+  try{
+    const parts=doc.file_base64.split(','); if(parts.length<2){showToast('Invalid document data','\u26a0\ufe0f');return;}
+    const mime=parts[0].match(/:(.*?);/)[1];
+    const binary=atob(parts[1]);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+    const blob=new Blob([bytes],{type:mime});
+    const url=URL.createObjectURL(blob);
+    const win=window.open(url,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    if(!win) showToast('Pop-up blocked — allow pop-ups for this site','\u26a0\ufe0f');
+  }catch(e){showToast('Could not open: '+e.message,'\u274c');}
 }
 async function deleteDocument(id){
   if(!confirm('Delete this document? This cannot be undone.')) return;
@@ -1832,6 +2039,513 @@ function applyTheme(){
   const saved=localStorage.getItem('safestaff_theme');
   if(saved==='light'){document.documentElement.classList.add('light');const btn=document.getElementById('theme-toggle');if(btn)btn.textContent='☀️';}
 }
+
+
+// ═══════════════════════════════════════════════════════════
+// ── v5 ADDITIONS: INCIDENTS, TOOLBOX TALKS, REPORTS ────────
+// ═══════════════════════════════════════════════════════════
+
+// extend cache
+cache.incidents = [];
+cache.toolbox   = [];
+
+// ── PATCH loadAll to include new tables ──────────────────
+const _v4loadAll = loadAll;
+loadAll = async function() {
+  await _v4loadAll();
+  const [inc, tb] = await Promise.all([
+    sb.from('incidents').select('*').order('incident_datetime',{ascending:false}),
+    sb.from('toolbox_talks').select('*').order('talk_date',{ascending:false})
+  ]);
+  cache.incidents = inc.data || [];
+  cache.toolbox   = tb.data || [];
+  updateIncidentBadge();
+};
+
+function updateIncidentBadge(){
+  const open = cache.incidents.filter(i=>i.status==='Open').length;
+  const el = document.getElementById('incident-badge');
+  if(el){ el.textContent=open; el.style.display=open>0?'':'none'; }
+}
+
+// ── PATCH switchView ──────────────────────────────────────
+const _v4switchView = switchView;
+switchView = function(v, el) {
+  const extras = {incidents:'Incident & Hazard Register', toolbox:'Toolbox Talk Log', reports:'Reports & Export'};
+  if(extras[v]){
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+    document.getElementById('view-'+v).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+    if(el) el.classList.add('active');
+    currentView=v;
+    document.getElementById('topbar-title').innerHTML=`${extras[v]} <span>${v==='reports'?'Analytics':v==='incidents'?'OHS Register':'Safety Briefings'}</span>`;
+    const ctaMap={incidents:'Log Incident',toolbox:'Log Talk',reports:null};
+    const cta=ctaMap[v];
+    document.getElementById('topbar-cta').textContent=cta?'+ '+cta:'';
+    document.getElementById('topbar-cta').style.display=cta?'':'none';
+    if(v==='incidents') renderIncidents('all');
+    if(v==='toolbox') renderToolbox();
+    return;
+  }
+  _v4switchView(v, el);
+};
+
+// ── PATCH handleCTA ───────────────────────────────────────
+const _v4handleCTA = handleCTA;
+handleCTA = function(){
+  if(currentView==='incidents'){ openAddIncident(); return; }
+  if(currentView==='toolbox'){ openAddToolbox(); return; }
+  _v4handleCTA();
+};
+
+// ══════════════════════════════════════════
+// INCIDENTS MODULE
+// ══════════════════════════════════════════
+
+const SEV_BADGE = {
+  Critical: 'badge-critical', High: 'badge-high', Medium: 'badge-medium', Low: 'badge-low'
+};
+const SEV_ORDER = { Critical:0, High:1, Medium:2, Low:3 };
+const STATUS_COLOR = { Open:'var(--red)', Investigating:'var(--yellow)', Closed:'var(--green)' };
+
+function filterIncidents(f, el){
+  document.querySelectorAll('#view-incidents .filter-tab').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  renderIncidents(f);
+}
+
+function renderIncidents(filter){
+  const stats = [
+    { label:'Total', value:cache.incidents.length, icon:'<span style="font-size:20px">📋</span>', accent:'var(--accent)' },
+    { label:'Open', value:cache.incidents.filter(i=>i.status==='Open').length, icon:'<span style="font-size:20px">🔴</span>', accent:'var(--red)' },
+    { label:'Investigating', value:cache.incidents.filter(i=>i.status==='Investigating').length, icon:'<span style="font-size:20px">🔍</span>', accent:'var(--yellow)' },
+    { label:'Near-Misses', value:cache.incidents.filter(i=>i.incident_type==='Near-Miss').length, icon:'<span style="font-size:20px">⚡</span>', accent:'var(--orange)' },
+  ];
+  document.getElementById('incident-stats-row').innerHTML = stats.map(s=>
+    '<div class="stat-card" style="--card-accent:'+s.accent+'"><div class="stat-icon-badge">'+s.icon+'</div><div class="stat-label">'+s.label+'</div><div class="stat-value">'+s.value+'</div></div>'
+  ).join('');
+
+  let list = filter==='all' ? cache.incidents : cache.incidents.filter(i=>i.status===filter||i.incident_type===filter);
+  list = [...list].sort((a,b)=>(SEV_ORDER[a.severity]||9)-(SEV_ORDER[b.severity]||9));
+  document.getElementById('incident-count-lbl').textContent = list.length+' record'+(list.length!==1?'s':'');
+
+  const tbody = document.getElementById('incident-tbody');
+  if(!list.length){
+    tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">No incidents recorded</div><div class="empty-sub">Click + Log Incident to record a new incident or hazard</div></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(function(inc){
+    var dt = inc.incident_datetime ? new Date(inc.incident_datetime).toLocaleString('en-ZA',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '--';
+    var stColor = STATUS_COLOR[inc.status]||'var(--text-dim)';
+    return '<tr onclick="viewIncident('+inc.id+')">'
+      +'<td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+dt+'</td>'
+      +'<td style="font-weight:600;font-size:12px">'+inc.incident_type+'</td>'
+      +'<td style="font-size:12px;color:var(--text-dim)">'+(inc.location||'--')+'</td>'
+      +'<td><span class="badge '+(SEV_BADGE[inc.severity]||'badge-blue')+'">'+inc.severity+'</span></td>'
+      +'<td style="font-size:12px;color:var(--text-dim)">'+(inc.reported_by_name||'--')+'</td>'
+      +'<td><span class="badge" style="background:'+stColor+'20;color:'+stColor+';border:1px solid '+stColor+'40">'+inc.status+'</span></td>'
+      +'<td onclick="event.stopPropagation()"><div class="actions-cell">'
+      +'<div class="icon-btn" onclick="viewIncident('+inc.id+')" title="View">👁</div>'
+      +'<div class="icon-btn" onclick="openEditIncident('+inc.id+')" title="Edit">✏️</div>'
+      +'<div class="icon-btn danger" onclick="deleteIncident('+inc.id+')" title="Delete">🗑</div>'
+      +'</div></td></tr>';
+  }).join('');
+}
+
+var editingIncidentId = null;
+
+function openAddIncident(){
+  editingIncidentId = null;
+  document.getElementById('modal-incident-title').textContent='Log Incident / Hazard';
+  document.getElementById('inc-type').value='Injury';
+  document.getElementById('inc-severity').value='Medium';
+  document.getElementById('inc-datetime').value=new Date().toISOString().slice(0,16);
+  document.getElementById('inc-status').value='Open';
+  document.getElementById('inc-location').value='';
+  document.getElementById('inc-witnesses').value='';
+  document.getElementById('inc-desc').value='';
+  document.getElementById('inc-action').value='';
+  document.getElementById('inc-corrective').value='';
+  document.getElementById('inc-closure').value='';
+  populateStaffCheckboxes('inc-staff-list');
+  toggleIncidentFields();
+  openModal('modal-incident');
+}
+
+function openEditIncident(id){
+  var inc = cache.incidents.find(function(x){return x.id===id;}); if(!inc) return;
+  editingIncidentId = id;
+  document.getElementById('modal-incident-title').textContent='Edit Incident';
+  document.getElementById('inc-type').value=inc.incident_type||'Injury';
+  document.getElementById('inc-severity').value=inc.severity||'Medium';
+  document.getElementById('inc-datetime').value=inc.incident_datetime?inc.incident_datetime.slice(0,16):'';
+  document.getElementById('inc-status').value=inc.status||'Open';
+  document.getElementById('inc-location').value=inc.location||'';
+  document.getElementById('inc-witnesses').value=inc.witnesses||'';
+  document.getElementById('inc-desc').value=inc.description||'';
+  document.getElementById('inc-action').value=inc.immediate_action||'';
+  document.getElementById('inc-corrective').value=inc.corrective_action||'';
+  document.getElementById('inc-closure').value=inc.closure_date||'';
+  populateStaffCheckboxes('inc-staff-list', JSON.parse(inc.staff_involved||'[]'));
+  toggleIncidentFields();
+  openModal('modal-incident');
+}
+
+function toggleIncidentFields(){
+  var status = document.getElementById('inc-status').value;
+  document.getElementById('inc-corrective-wrap').style.display = (status==='Investigating'||status==='Closed') ? 'block' : 'none';
+  document.getElementById('inc-closure-wrap').style.display = status==='Closed' ? 'block' : 'none';
+}
+
+async function saveIncident(){
+  var desc = document.getElementById('inc-desc').value.trim();
+  var dt   = document.getElementById('inc-datetime').value;
+  if(!desc||!dt){ showToast('Description and date/time required','⚠️'); return; }
+  try{
+    setSyncing(true);
+    var involved = getCheckedStaff('inc-staff-list');
+    var payload = {
+      incident_type: document.getElementById('inc-type').value,
+      severity: document.getElementById('inc-severity').value,
+      incident_datetime: dt,
+      location: document.getElementById('inc-location').value||null,
+      witnesses: document.getElementById('inc-witnesses').value||null,
+      staff_involved: JSON.stringify(involved),
+      description: desc,
+      immediate_action: document.getElementById('inc-action').value||null,
+      status: document.getElementById('inc-status').value,
+      corrective_action: document.getElementById('inc-corrective').value||null,
+      closure_date: document.getElementById('inc-closure').value||null,
+      reported_by_name: currentUser._name||currentUser.email
+    };
+    if(editingIncidentId){
+      await sb.from('incidents').update(payload).eq('id',editingIncidentId);
+    } else {
+      payload.reported_by = currentUser.id;
+      await sb.from('incidents').insert(payload);
+      await sb.from('activity_log').insert({action:'Incident Logged',item:payload.incident_type+' — '+payload.severity,status:payload.status,performed_by:currentUser.id});
+    }
+    await loadAll(); closeModal('modal-incident'); renderIncidents('all'); setSyncing(false);
+    showToast(editingIncidentId?'Incident updated':'Incident logged','⚠️');
+  }catch(e){ setSyncing(false); showToast(e.message,'❌'); }
+}
+
+function viewIncident(id){
+  var inc = cache.incidents.find(function(x){return x.id===id;}); if(!inc) return;
+  var involved = JSON.parse(inc.staff_involved||'[]').map(function(sid){
+    var s=cache.staff.find(function(x){return x.id===sid;}); return s?s.fname+' '+s.lname+' ('+s.eid+')':'Unknown';
+  });
+  var dt = inc.incident_datetime ? new Date(inc.incident_datetime).toLocaleString('en-ZA',{dateStyle:'full',timeStyle:'short'}) : '--';
+  document.getElementById('inc-view-title').textContent=inc.incident_type+' — '+inc.severity+' Severity';
+  document.getElementById('inc-view-sub').textContent=dt+' · '+(inc.location||'--');
+  var stColor = STATUS_COLOR[inc.status]||'var(--text-dim)';
+  document.getElementById('inc-view-body').innerHTML=
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'
+    +'<span class="badge '+(SEV_BADGE[inc.severity]||'badge-blue')+'">'+inc.severity+' Severity</span>'
+    +'<span class="badge" style="background:'+stColor+'20;color:'+stColor+'">'+inc.status+'</span>'
+    +'<span class="badge badge-blue">'+inc.incident_type+'</span></div>'
+    +'<div class="info-grid" style="margin-bottom:16px">'
+    +'<div><div class="info-label">Date &amp; Time</div><div class="info-value">'+dt+'</div></div>'
+    +'<div><div class="info-label">Location</div><div class="info-value">'+(inc.location||'--')+'</div></div>'
+    +'<div><div class="info-label">Reported By</div><div class="info-value">'+(inc.reported_by_name||'--')+'</div></div>'
+    +'<div><div class="info-label">Witnesses</div><div class="info-value">'+(inc.witnesses||'--')+'</div></div></div>'
+    +(involved.length?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Staff Involved</div><div style="display:flex;flex-wrap:wrap;gap:6px">'+involved.map(function(n){return '<span class="badge badge-purple">'+n+'</span>';}).join('')+'</div></div>':'')
+    +'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Description</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+(inc.description||'--')+'</div></div>'
+    +(inc.immediate_action?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Immediate Action Taken</div><div style="background:var(--green-bg);border:1px solid rgba(45,212,170,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+inc.immediate_action+'</div></div>':'')
+    +(inc.corrective_action?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Corrective Action</div><div style="background:var(--blue-bg);border:1px solid rgba(94,166,252,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+inc.corrective_action+'</div></div>':'')
+    +(inc.closure_date?'<div><div class="info-label">Closure Date</div><div class="info-value">'+fmt(inc.closure_date)+'</div></div>':'');
+  openModal('modal-incident-view');
+}
+
+async function deleteIncident(id){
+  if(!confirm('Delete this incident record? This cannot be undone.')) return;
+  try{ setSyncing(true); await sb.from('incidents').delete().eq('id',id); await loadAll(); renderIncidents('all'); setSyncing(false); showToast('Incident deleted','🗑'); }
+  catch(e){ setSyncing(false); showToast(e.message,'❌'); }
+}
+
+// ══════════════════════════════════════════
+// TOOLBOX TALKS MODULE
+// ══════════════════════════════════════════
+
+var editingToolboxId = null;
+
+function renderToolbox(){
+  var list = cache.toolbox;
+  document.getElementById('toolbox-count-lbl').textContent=list.length+' talk'+(list.length!==1?'s':'');
+  var tbody = document.getElementById('toolbox-tbody');
+  if(!list.length){
+    tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🗣</div><div class="empty-title">No toolbox talks logged</div></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(function(tb){
+    var cnt = JSON.parse(tb.attendees||'[]').length;
+    return '<tr onclick="viewToolbox('+tb.id+')">'
+      +'<td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(tb.talk_date)+'</td>'
+      +'<td style="font-weight:600;font-size:13px">'+tb.topic+'</td>'
+      +'<td><span class="badge badge-blue">'+(tb.category||'General Safety')+'</span></td>'
+      +'<td style="font-size:12px;color:var(--text-dim)">'+(tb.facilitator||'--')+'</td>'
+      +'<td><span class="badge badge-purple">'+cnt+' staff</span></td>'
+      +'<td style="font-size:12px;color:var(--text-dim)">'+(tb.duration_minutes?tb.duration_minutes+' min':'--')+'</td>'
+      +'<td onclick="event.stopPropagation()"><div class="actions-cell">'
+      +'<div class="icon-btn" onclick="viewToolbox('+tb.id+')" title="View">👁</div>'
+      +'<div class="icon-btn" onclick="openEditToolbox('+tb.id+')" title="Edit">✏️</div>'
+      +'<div class="icon-btn danger" onclick="deleteToolbox('+tb.id+')" title="Delete">🗑</div>'
+      +'</div></td></tr>';
+  }).join('');
+}
+
+function openAddToolbox(){
+  editingToolboxId = null;
+  document.getElementById('modal-toolbox-title').textContent='Log Toolbox Talk';
+  document.getElementById('tb-date').value=today();
+  document.getElementById('tb-topic').value='';
+  document.getElementById('tb-cat').value='General Safety';
+  document.getElementById('tb-facilitator').value=currentUser._name||currentUser.email;
+  document.getElementById('tb-duration').value='';
+  document.getElementById('tb-points').value='';
+  document.getElementById('tb-actions').value='';
+  document.getElementById('tb-signoff').checked=false;
+  populateStaffCheckboxes('tb-staff-list');
+  openModal('modal-toolbox');
+}
+
+function openEditToolbox(id){
+  var tb = cache.toolbox.find(function(x){return x.id===id;}); if(!tb) return;
+  editingToolboxId = id;
+  document.getElementById('modal-toolbox-title').textContent='Edit Toolbox Talk';
+  document.getElementById('tb-date').value=tb.talk_date||today();
+  document.getElementById('tb-topic').value=tb.topic||'';
+  document.getElementById('tb-cat').value=tb.category||'General Safety';
+  document.getElementById('tb-facilitator').value=tb.facilitator||'';
+  document.getElementById('tb-duration').value=tb.duration_minutes||'';
+  document.getElementById('tb-points').value=tb.key_points||'';
+  document.getElementById('tb-actions').value=tb.actions_arising||'';
+  document.getElementById('tb-signoff').checked=tb.sign_off||false;
+  populateStaffCheckboxes('tb-staff-list', JSON.parse(tb.attendees||'[]'));
+  openModal('modal-toolbox');
+}
+
+async function saveToolbox(){
+  var topic = document.getElementById('tb-topic').value.trim();
+  var date  = document.getElementById('tb-date').value;
+  if(!topic||!date){ showToast('Topic and date required','⚠️'); return; }
+  try{
+    setSyncing(true);
+    var attendees = getCheckedStaff('tb-staff-list');
+    var payload = {
+      talk_date: date,
+      topic: topic,
+      category: document.getElementById('tb-cat').value,
+      facilitator: document.getElementById('tb-facilitator').value||null,
+      attendees: JSON.stringify(attendees),
+      duration_minutes: parseInt(document.getElementById('tb-duration').value)||null,
+      key_points: document.getElementById('tb-points').value||null,
+      actions_arising: document.getElementById('tb-actions').value||null,
+      sign_off: document.getElementById('tb-signoff').checked
+    };
+    if(editingToolboxId){
+      await sb.from('toolbox_talks').update(payload).eq('id',editingToolboxId);
+    } else {
+      payload.created_by=currentUser.id;
+      await sb.from('toolbox_talks').insert(payload);
+      await sb.from('activity_log').insert({action:'Toolbox Talk Logged',item:topic,status:'complete',performed_by:currentUser.id});
+    }
+    await loadAll(); closeModal('modal-toolbox'); renderToolbox(); setSyncing(false);
+    showToast(editingToolboxId?'Talk updated':'Toolbox talk logged','🗣');
+  }catch(e){ setSyncing(false); showToast(e.message,'❌'); }
+}
+
+function viewToolbox(id){
+  var tb = cache.toolbox.find(function(x){return x.id===id;}); if(!tb) return;
+  var ids = JSON.parse(tb.attendees||'[]');
+  var names = ids.map(function(sid){
+    var s=cache.staff.find(function(x){return x.id===sid;});
+    return s?{name:s.fname+' '+s.lname,eid:s.eid,bg:colorFor(s.eid)}:null;
+  }).filter(Boolean);
+  document.getElementById('tb-view-title').textContent=tb.topic;
+  document.getElementById('tb-view-sub').textContent=fmt(tb.talk_date)+' · '+(tb.facilitator||'--')+' · '+(tb.category||'General Safety');
+  document.getElementById('tb-view-body').innerHTML=
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'
+    +'<span class="badge badge-blue">'+(tb.category||'General Safety')+'</span>'
+    +(tb.duration_minutes?'<span class="badge badge-purple">'+tb.duration_minutes+' minutes</span>':'')
+    +(tb.sign_off?'<span class="badge badge-green">✓ Sign-off confirmed</span>':'<span class="badge badge-yellow">No sign-off</span>')
+    +'</div>'
+    +'<div class="info-grid" style="margin-bottom:16px">'
+    +'<div><div class="info-label">Date</div><div class="info-value">'+fmt(tb.talk_date)+'</div></div>'
+    +'<div><div class="info-label">Facilitator</div><div class="info-value">'+(tb.facilitator||'--')+'</div></div></div>'
+    +(names.length?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:8px">Attendees ('+names.length+')</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+names.map(function(a){return '<div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-xs);padding:5px 10px;font-size:12px"><div class="avatar" style="background:'+a.bg+'20;color:'+a.bg+';width:22px;height:22px;font-size:9px">'+a.name.split(' ').map(function(w){return w[0];}).join('')+'</div>'+a.name+' <span style="color:var(--text-muted);font-family:\'IBM Plex Mono\',monospace;font-size:10px;margin-left:4px">'+a.eid+'</span></div>';}).join('')+'</div></div>':'<div style="color:var(--text-muted);font-size:12px;margin-bottom:14px">No attendees recorded</div>')
+    +(tb.key_points?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Key Points Discussed</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7;white-space:pre-wrap">'+tb.key_points+'</div></div>':'')
+    +(tb.actions_arising?'<div><div class="info-label" style="margin-bottom:6px">Actions Arising</div><div style="background:var(--yellow-bg);border:1px solid rgba(249,195,58,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7;white-space:pre-wrap">'+tb.actions_arising+'</div></div>':'');
+  openModal('modal-toolbox-view');
+}
+
+async function deleteToolbox(id){
+  if(!confirm('Delete this toolbox talk record?')) return;
+  try{ setSyncing(true); await sb.from('toolbox_talks').delete().eq('id',id); await loadAll(); renderToolbox(); setSyncing(false); showToast('Deleted','🗑'); }
+  catch(e){ setSyncing(false); showToast(e.message,'❌'); }
+}
+
+// ══════════════════════════════════════════
+// SHARED: MULTI-SELECT CHECKBOXES
+// ══════════════════════════════════════════
+
+function populateStaffCheckboxes(listId, selected){
+  selected = selected||[];
+  var el = document.getElementById(listId);
+  el.innerHTML = cache.staff.filter(function(s){return s.active;}).map(function(s){
+    var bg = colorFor(s.eid);
+    return '<label class="attendee-item">'
+      +'<input type="checkbox" value="'+s.id+'" '+(selected.includes(s.id)?'checked':'')+'>'
+      +'<div class="avatar" style="background:'+bg+'20;color:'+bg+';width:22px;height:22px;font-size:9px;flex-shrink:0">'+initials(s.fname,s.lname)+'</div>'
+      +s.fname+' '+s.lname+' <span style="color:var(--text-muted);font-family:\'IBM Plex Mono\',monospace;font-size:10px;margin-left:4px">'+s.eid+'</span>'
+      +'</label>';
+  }).join('');
+}
+
+function filterAttendees(listId, q){
+  var items = document.querySelectorAll('#'+listId+' .attendee-item');
+  items.forEach(function(item){
+    item.style.display = item.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function getCheckedStaff(listId){
+  return Array.from(document.querySelectorAll('#'+listId+' input[type=checkbox]:checked')).map(function(cb){return parseInt(cb.value);});
+}
+
+// ══════════════════════════════════════════
+// REPORTS MODULE
+// ══════════════════════════════════════════
+
+var _reportData = [];
+var _reportTitle = '';
+
+function openExpiryReport(){ openModal('modal-expiry-range'); }
+
+function generateExpiryReport(){
+  var days = parseInt(document.getElementById('expiry-range').value);
+  closeModal('modal-expiry-range');
+  generateReport('expiring', days);
+}
+
+function generateReport(type, param){
+  var now = new Date();
+  var dateStr = now.toLocaleDateString('en-ZA',{day:'2-digit',month:'long',year:'numeric'});
+  var title='', headers=[], rows=[];
+  _reportData = [];
+
+  if(type==='compliance'){
+    title='Staff Compliance Summary';
+    var active=cache.staff.filter(function(s){return s.active;});
+    var mandatory=cache.competencies.filter(function(c){return c.mandatory==='yes';});
+    headers=['Employee','EID','Department','Mandatory Training','Medical','Compliance %'];
+    rows=active.map(function(s){
+      var trRecs=cache.training.filter(function(t){return t.staff_id===s.id;});
+      var med=cache.medicals.filter(function(m){return m.staff_id===s.id;}).sort(function(a,b){return new Date(b.exam_date)-new Date(a.exam_date);})[0];
+      var ok=mandatory.filter(function(c){var r=trRecs.find(function(t){return t.competency_id===c.id;});return r&&tStatus(r.expiry_date)==='current';}).length;
+      var pct=mandatory.length?Math.round((ok/mandatory.length)*100):100;
+      var trSt=ok===mandatory.length?'All Current':ok+'/'+mandatory.length+' Current';
+      _reportData.push([s.fname+' '+s.lname,s.eid,s.dept_name,trSt,med?OUTCOME_LABEL[med.outcome]||med.outcome:'Not Recorded',pct+'%']);
+      var pctColor=pct>=90?'var(--green)':pct>=60?'var(--yellow)':'var(--red)';
+      return '<tr><td>'+s.fname+' '+s.lname+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+s.eid+'</td><td>'+s.dept_name+'</td><td>'+trSt+'</td><td>'+(med?'<span class="badge '+(OUTCOME_BADGE[med.outcome]||'badge-blue')+'">'+OUTCOME_LABEL[med.outcome]+'</span>':'<span class="badge badge-red">Not Recorded</span>')+'</td><td><strong style="color:'+pctColor+'">'+pct+'%</strong></td></tr>';
+    });
+  }
+  else if(type==='expiring'){
+    var days=param||60;
+    title='Expiring Certifications (within '+days+' days)';
+    headers=['Staff Member','EID','Type','Record','Expires','Days Left','Status'];
+    var cutoff=new Date(); cutoff.setDate(cutoff.getDate()+days);
+    var today2=new Date();
+    cache.training.filter(function(t){return t.expiry_date&&new Date(t.expiry_date)<=cutoff&&new Date(t.expiry_date)>=today2;}).forEach(function(t){
+      var d=daysUntil(t.expiry_date);
+      _reportData.push([t.fname+' '+t.lname,t.eid,'Training',t.competency_name,fmt(t.expiry_date),d+'d',tStatus(t.expiry_date)]);
+      rows.push('<tr><td>'+t.fname+' '+t.lname+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+t.eid+'</td><td><span class="badge badge-blue">Training</span></td><td>'+t.competency_name+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(t.expiry_date)+'</td><td>'+d+'</td><td>'+STATUS_BADGE[tStatus(t.expiry_date)]+'</td></tr>');
+    });
+    cache.medicals.filter(function(m){return m.expiry_date&&new Date(m.expiry_date)<=cutoff&&new Date(m.expiry_date)>=today2;}).forEach(function(m){
+      var d=daysUntil(m.expiry_date);
+      _reportData.push([m.fname+' '+m.lname,m.eid,'Medical',m.exam_type,fmt(m.expiry_date),d+'d',mStatus(m.expiry_date)]);
+      rows.push('<tr><td>'+m.fname+' '+m.lname+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+m.eid+'</td><td><span class="badge badge-orange">Medical</span></td><td>'+m.exam_type+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(m.expiry_date)+'</td><td>'+d+'</td><td>'+STATUS_BADGE[mStatus(m.expiry_date)]+'</td></tr>');
+    });
+  }
+  else if(type==='sites'){
+    title='Site Induction Status Report';
+    headers=['Site','Staff Member','EID','Inducted','Expires','Days Left','Status'];
+    cache.sites.forEach(function(site){
+      var inds=cache.inductions.filter(function(i){return i.site_id===site.id;});
+      var inducted=inds.map(function(i){return i.staff_id;});
+      var notInd=cache.staff.filter(function(s){return s.active&&!inducted.includes(s.id);});
+      inds.forEach(function(i){
+        var d=daysUntil(i.expiry_date);
+        _reportData.push([site.name,i.fname+' '+i.lname,i.eid,fmt(i.inducted_date),fmt(i.expiry_date),d!==null?d+'d':'--',indStatus(i.expiry_date)]);
+        rows.push('<tr><td style="font-weight:600">'+site.name+'</td><td>'+i.fname+' '+i.lname+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+i.eid+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(i.inducted_date)+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(i.expiry_date)+'</td><td>'+(d!==null?d:'')+'</td><td>'+STATUS_BADGE[indStatus(i.expiry_date)]+'</td></tr>');
+      });
+      notInd.forEach(function(s){
+        _reportData.push([site.name,s.fname+' '+s.lname,s.eid,'--','--','--','Not Inducted']);
+        rows.push('<tr><td style="font-weight:600">'+site.name+'</td><td>'+s.fname+' '+s.lname+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+s.eid+'</td><td style="color:var(--text-muted);font-size:12px;font-style:italic" colspan="4">Not inducted</td></tr>');
+      });
+    });
+  }
+  else if(type==='medical'){
+    title='Medical Fitness Roster';
+    headers=['Staff Member','EID','Department','Exam Type','Outcome','Doctor','Expires','Status'];
+    cache.staff.filter(function(s){return s.active;}).forEach(function(s){
+      var med=cache.medicals.filter(function(m){return m.staff_id===s.id;}).sort(function(a,b){return new Date(b.exam_date)-new Date(a.exam_date);})[0];
+      if(!med){
+        _reportData.push([s.fname+' '+s.lname,s.eid,s.dept_name,'--','Not Recorded','--','--','Not Recorded']);
+        rows.push('<tr><td>'+s.fname+' '+s.lname+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+s.eid+'</td><td>'+s.dept_name+'</td><td colspan="5" style="color:var(--text-muted);font-size:12px;font-style:italic">No medical on record</td></tr>');
+      } else {
+        _reportData.push([s.fname+' '+s.lname,s.eid,s.dept_name,med.exam_type,OUTCOME_LABEL[med.outcome]||med.outcome,med.doctor||'--',fmt(med.expiry_date),mStatus(med.expiry_date)]);
+        rows.push('<tr><td>'+s.fname+' '+s.lname+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+s.eid+'</td><td>'+s.dept_name+'</td><td style="font-size:12px">'+med.exam_type+'</td><td><span class="badge '+(OUTCOME_BADGE[med.outcome]||'badge-blue')+'">'+OUTCOME_LABEL[med.outcome]+'</span></td><td style="font-size:11px;color:var(--text-dim)">'+(med.doctor||'--')+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(med.expiry_date)+'</td><td>'+STATUS_BADGE[mStatus(med.expiry_date)]+'</td></tr>');
+      }
+    });
+  }
+  else if(type==='activity'){
+    title='Full Activity Log';
+    headers=['Date','Staff Member','EID','Action','Item','Status'];
+    sb.from('activity_log').select('*, staff(fname,lname,eid)').order('created_at',{ascending:false}).limit(500).then(function(r){
+      var acts=r.data||[];
+      acts.forEach(function(a){_reportData.push([fmt(a.created_at),(a.staff?.fname||'--')+' '+(a.staff?.lname||''),a.staff?.eid||'',a.action,a.item||'--',a.status||'--']);});
+      var rrows=acts.map(function(a){return '<tr><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(a.created_at)+'</td><td>'+(a.staff?.fname||'--')+' '+(a.staff?.lname||'')+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;color:var(--text-dim)">'+(a.staff?.eid||'')+'</td><td style="font-size:12px;font-weight:600">'+a.action+'</td><td style="font-size:12px;color:var(--text-dim)">'+(a.item||'--')+'</td><td style="font-size:12px">'+(a.status||'--')+'</td></tr>';}).join('');
+      renderReportModal(title,headers,rrows,dateStr);
+    });
+    return;
+  }
+  else if(type==='incidents'){
+    title='Incident Register';
+    headers=['Date','Type','Severity','Location','Reported By','Status','Description'];
+    cache.incidents.forEach(function(inc){
+      var dt=inc.incident_datetime?new Date(inc.incident_datetime).toLocaleDateString('en-ZA'):'--';
+      _reportData.push([dt,inc.incident_type,inc.severity,inc.location||'--',inc.reported_by_name||'--',inc.status,(inc.description||'').slice(0,80)]);
+      var stColor=STATUS_COLOR[inc.status]||'var(--text-dim)';
+      rows.push('<tr><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+dt+'</td><td>'+inc.incident_type+'</td><td><span class="badge '+(SEV_BADGE[inc.severity]||'badge-blue')+'">'+inc.severity+'</span></td><td style="font-size:12px;color:var(--text-dim)">'+(inc.location||'--')+'</td><td style="font-size:12px;color:var(--text-dim)">'+(inc.reported_by_name||'--')+'</td><td><span class="badge" style="background:'+stColor+'20;color:'+stColor+'">'+inc.status+'</span></td><td style="font-size:12px;color:var(--text-dim);max-width:200px">'+((inc.description||'').slice(0,80))+(inc.description&&inc.description.length>80?'…':'')+'</td></tr>');
+    });
+  }
+
+  renderReportModal(title, headers, rows.join(''), dateStr);
+}
+
+function renderReportModal(title, headers, bodyHtml, dateStr){
+  _reportTitle=title;
+  document.getElementById('report-modal-title').textContent=title;
+  document.getElementById('report-modal-sub').textContent='Generated: '+dateStr;
+  document.getElementById('print-report-title').textContent=title;
+  document.getElementById('print-report-date').textContent='Generated: '+dateStr;
+  document.getElementById('report-content').innerHTML='<div class="report-table-wrap"><table class="report-table"><thead><tr>'+headers.map(function(h){return '<th>'+h+'</th>';}).join('')+'</tr></thead><tbody>'+(bodyHtml||'<tr><td colspan="'+headers.length+'" style="text-align:center;padding:40px;color:var(--text-muted)">No data</td></tr>')+'</tbody></table></div>';
+  openModal('modal-report');
+}
+
+function exportReportCSV(){
+  if(!_reportData.length){ showToast('Generate a report first','⚠️'); return; }
+  var csv=_reportData.map(function(row){return row.map(function(cell){return '"'+String(cell||'').replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download=_reportTitle.replace(/[^a-z0-9]/gi,'_')+'_'+new Date().toISOString().split('T')[0]+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('CSV downloaded','⬇');
+}
+
 
 // ── INIT ──────────────────────────────────────────────────
 (async()=>{

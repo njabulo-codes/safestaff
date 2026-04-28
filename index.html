@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SafeStaff OHS</title>
+<title>SafeStaff OHS v6</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -442,7 +442,7 @@ tbody td { padding:14px 16px; font-size:13px; }
       <div class="login-shield">🛡</div>
       <div>
         <div class="login-title">SafeStaff</div>
-        <div class="login-sub">OHS Manager</div>
+        <div class="login-sub">OHS Manager · v6</div>
       </div>
     </div>
     <div class="login-err" id="login-err"></div>
@@ -467,7 +467,7 @@ tbody td { padding:14px 16px; font-size:13px; }
         <div class="logo-shield">🛡</div>
         <div>
           <div class="logo-text">SafeStaff</div>
-          <div class="logo-sub">OHS Manager</div>
+          <div class="logo-sub">OHS Manager · v6</div>
         </div>
       </div>
     </div>
@@ -1242,11 +1242,15 @@ const VIEW_TITLES={
   training:['Training Records','OHS Compliance'],competencies:['Competency Framework','OHS Requirements'],
   medicals:['Medical Records','Occupational Health'],alerts:['Compliance Alerts','Action Required'],
   sites:['Sites & Inductions','Client Sites'],matrix:['Skills Matrix','Competency Overview'],
-  admin:['Admin Panel','User & Data Management'],offboarding:['Staff Offboarding','Lifecycle']
+  admin:['Admin Panel','User & Data Management'],offboarding:['Staff Offboarding','Lifecycle'],
+  incidents:['Incident & Hazard Register','OHS Register'],
+  toolbox:['Toolbox Talk Log','Safety Briefings'],
+  reports:['Reports & Export','Analytics']
 };
 const CTA_MAP={
   dashboard:'Add Staff',staff:'Add Staff',training:'Log Training',competencies:'Add Competency',
-  medicals:'Log Medical',admin:'Add Staff',offboarding:null,departments:null,alerts:null,matrix:null,sites:'Add Site'
+  medicals:'Log Medical',admin:'Add Staff',offboarding:null,departments:null,alerts:null,matrix:null,
+  sites:'Add Site',incidents:'Log Incident',toolbox:'Log Talk',reports:null
 };
 
 function switchView(v,el){
@@ -1264,16 +1268,30 @@ function switchView(v,el){
 }
 
 function handleCTA(){
-  const map={staff:openAddStaff,training:openAddTraining,medicals:()=>openAddMedical(null),competencies:openAddComp,admin:openAddStaff,dashboard:openAddStaff,sites:openAddSite};
+  const map={
+    staff:openAddStaff,training:openAddTraining,medicals:()=>openAddMedical(null),
+    competencies:openAddComp,admin:openAddStaff,dashboard:openAddStaff,sites:openAddSite,
+    incidents:openAddIncident,toolbox:openAddToolbox
+  };
   if(map[currentView]) map[currentView]();
 }
 
 function renderView(v){
-  const fn={dashboard:renderDashboard,staff:()=>renderStaff('all'),departments:renderDepts,training:()=>renderTraining('all'),competencies:renderComps,medicals:()=>renderMedicals('all'),alerts:renderAlerts,sites:renderSites,matrix:renderMatrix,admin:renderAdmin,offboarding:renderOffboarding}[v];
+  const fn={
+    dashboard:renderDashboard,staff:()=>renderStaff('all'),departments:renderDepts,
+    training:()=>renderTraining('all'),competencies:renderComps,medicals:()=>renderMedicals('all'),
+    alerts:renderAlerts,sites:renderSites,matrix:renderMatrix,admin:renderAdmin,offboarding:renderOffboarding,
+    incidents:()=>renderIncidents('all'),toolbox:renderToolbox,reports:()=>{}
+  }[v];
   if(fn) fn();
 }
 
-function handleSearch(q){if(currentView==='staff') renderStaff(document.querySelector('#view-staff .filter-tab.active')?.textContent?.toLowerCase()||'all',q);}
+let _staffSearchQ='';
+function handleSearch(q){
+  _staffSearchQ=q;
+  if(currentView==='staff') renderStaff(document.querySelector('#view-staff .filter-tab.active')?.textContent?.toLowerCase()||'all',q);
+}
+
 
 // ── DASHBOARD ─────────────────────────────────────────────
 async function renderDashboard(){
@@ -1288,7 +1306,17 @@ async function renderDashboard(){
   document.getElementById('stat-total').textContent=active.length;
   document.getElementById('stat-expiring').textContent=trExp+medExp+siteExp;
   document.getElementById('stat-overdue').textContent=trExpired+medExpired+noMed+siteExpired;
-  document.getElementById('stat-current').textContent=active.length-(trExpired>0?1:0);
+  // Count staff who are fully compliant (all mandatory training current + medical current)
+  const mandatory=cache.competencies.filter(c=>c.mandatory==='yes');
+  const fullyCompliant=active.filter(s=>{
+    const medOk=cache.medicals.find(m=>m.staff_id===s.id&&mStatus(m.expiry_date)==='current');
+    if(!medOk) return false;
+    return mandatory.every(c=>{
+      const rec=cache.training.find(t=>t.staff_id===s.id&&t.competency_id===c.id);
+      return rec&&tStatus(rec.expiry_date)==='current';
+    });
+  }).length;
+  document.getElementById('stat-current').textContent=fullyCompliant;
   updateBadges();
   const{data:acts}=await sb.from('activity_log').select('*, staff(fname,lname,eid)').order('created_at',{ascending:false}).limit(12);
   const tbody=document.getElementById('activity-tbody');
@@ -1307,6 +1335,10 @@ function updateBadges(){
   const siteIssues=cache.inductions.filter(i=>indStatus(i.expiry_date)!=='current').length;
   const sb2=document.getElementById('sites-badge');
   sb2.textContent=siteIssues;sb2.style.display=siteIssues>0?'':'none';
+  // Incident badge
+  const openInc=(cache.incidents||[]).filter(i=>i.status==='Open').length;
+  const ib=document.getElementById('incident-badge');
+  if(ib){ib.textContent=openInc;ib.style.display=openInc>0?'':'none';}
 }
 
 // ── STAFF ─────────────────────────────────────────────────
@@ -1323,7 +1355,7 @@ function renderStaff(filter,q=''){
     return`<tr onclick="openDetail(${s.id})"><td><div class="staff-cell">${avatarHtml}<div><div class="staff-name">${s.fname} ${s.lname}</div><div class="staff-id">${s.eid}</div></div></div></td><td>${s.dept_name}</td><td>${s.role}</td><td><span class="badge badge-blue">${s.emptype||'Full-time'}</span></td><td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${s.top_size||'—'} / ${s.pants_size||'—'}</td><td>${badge}</td><td onclick="event.stopPropagation()"><div class="actions-cell"><div class="icon-btn" onclick="openDetail(${s.id})" title="View">👁</div><div class="icon-btn" onclick="openEditStaff(${s.id})" title="Edit">✏️</div><div class="icon-btn warning" onclick="openOffboard(${s.id})" title="Offboard">🚪</div><div class="icon-btn danger" onclick="deleteStaff(${s.id},'${s.fname} ${s.lname}')" title="Delete">🗑</div></div></td></tr>`;
   }).join('');
 }
-function filterStaff(f,el){document.querySelectorAll('#view-staff .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderStaff(f);}
+function filterStaff(f,el){document.querySelectorAll('#view-staff .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderStaff(f,_staffSearchQ);}
 
 // ── DEPARTMENTS ───────────────────────────────────────────
 function renderDepts(){
@@ -2001,7 +2033,18 @@ function viewDocument(id){
 }
 async function deleteDocument(id){
   if(!confirm('Delete this document? This cannot be undone.')) return;
-  try{setSyncing(true);await sb.from('staff_documents').delete().eq('id',id);await loadAll();setSyncing(false);showToast('Document deleted','🗑');}catch(e){setSyncing(false);showToast(e.message,'❌');}
+  // Find which staff member this doc belongs to before deleting
+  const doc=cache.documents.find(d=>d.id===id||d.id===parseInt(id));
+  const staffId=doc?.staff_id;
+  try{
+    setSyncing(true);
+    await sb.from('staff_documents').delete().eq('id',id);
+    await loadAll();
+    setSyncing(false);
+    showToast('Document deleted','🗑');
+    // Refresh the detail modal if it is currently open for this staff member
+    if(staffId && document.getElementById('modal-detail').classList.contains('open')) openDetail(staffId);
+  }catch(e){setSyncing(false);showToast(e.message,'❌');}
 }
 
 // ── CRUD: USERS ───────────────────────────────────────────
@@ -2068,35 +2111,7 @@ function updateIncidentBadge(){
   if(el){ el.textContent=open; el.style.display=open>0?'':'none'; }
 }
 
-// ── PATCH switchView ──────────────────────────────────────
-const _v4switchView = switchView;
-switchView = function(v, el) {
-  const extras = {incidents:'Incident & Hazard Register', toolbox:'Toolbox Talk Log', reports:'Reports & Export'};
-  if(extras[v]){
-    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
-    document.getElementById('view-'+v).classList.add('active');
-    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
-    if(el) el.classList.add('active');
-    currentView=v;
-    document.getElementById('topbar-title').innerHTML=`${extras[v]} <span>${v==='reports'?'Analytics':v==='incidents'?'OHS Register':'Safety Briefings'}</span>`;
-    const ctaMap={incidents:'Log Incident',toolbox:'Log Talk',reports:null};
-    const cta=ctaMap[v];
-    document.getElementById('topbar-cta').textContent=cta?'+ '+cta:'';
-    document.getElementById('topbar-cta').style.display=cta?'':'none';
-    if(v==='incidents') renderIncidents('all');
-    if(v==='toolbox') renderToolbox();
-    return;
-  }
-  _v4switchView(v, el);
-};
-
-// ── PATCH handleCTA ───────────────────────────────────────
-const _v4handleCTA = handleCTA;
-handleCTA = function(){
-  if(currentView==='incidents'){ openAddIncident(); return; }
-  if(currentView==='toolbox'){ openAddToolbox(); return; }
-  _v4handleCTA();
-};
+// v6: switchView and handleCTA patches removed — logic merged into main functions above
 
 // ══════════════════════════════════════════
 // INCIDENTS MODULE

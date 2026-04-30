@@ -654,7 +654,20 @@ tbody td { padding:14px 16px; font-size:13px; }
             <tbody id="users-tbody"></tbody>
           </table></div>
         </div>
-        <div class="admin-section">
+        <div class="admin-section" id="import-section">
+          <div class="admin-section-title"><span>📥</span> Training Data Import</div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.6">
+            Import <strong>208 training records</strong> for <strong>104 staff members</strong> from the GaucheAir Staff Training Matrix (29 Apr 2026).
+            The import will match staff by name, create any missing competencies, and insert training records.
+            Records for unmatched names are skipped and reported. This operation is safe to run once — existing records are not duplicated.
+          </p>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" id="import-btn" onclick="runTrainingImport()">📥 Run Import</button>
+            <span id="import-status" style="font-size:12px;color:var(--text-dim)"></span>
+          </div>
+          <div id="import-log" style="margin-top:14px;max-height:260px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px"></div>
+        </div>
+      <div class="admin-section">
           <div class="admin-section-title"><span>🗄️</span> Database Stats</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px" id="db-stats"></div>
         </div>
@@ -1091,6 +1104,10 @@ tbody td { padding:14px 16px; font-size:13px; }
 <!-- ══ SCRIPT ════════════════════════════════════════════════ -->
 <script>
 'use strict';
+
+// ── TRAINING IMPORT PAYLOAD (GaucheAir 29 Apr 2026) ──────────
+const IMPORT_PAYLOAD = {"staff":[{"name":"Aaron Brandt","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-04-21"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-04-21"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Aidan Bollaert","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2026-05-21"},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Alec Isemonger","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Allen Ngubane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-26"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-06-09"}]},{"name":"Andile Khanyezi","records":[{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Andile Mzimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-05-02"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2029-01-15"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2026-01-15"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-01-15"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Bheka Mzimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Bongani Mgenge","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-05-02"}]},{"name":"Bongani Mwelase","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-05"}]},{"name":"Bongumusa Gcabashe","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Bossie Boshoff","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-12-15"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2028-09-08"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-04-15"}]},{"name":"Brad Gauche","records":[{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Brandon Walker","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Brett Van Niekerk","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Cameron Egan","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Clement Gumbi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-11"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2026-10-12"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2026-05-28"}]},{"name":"Clement Mnguni","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-10-29"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"}]},{"name":"Craig Seegers","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Damiane Naidoo","records":[{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Danny Naidoo","records":[{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-03-04"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-03-05"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"David Nyahundzvi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-10-29"}]},{"name":"Deacon Elliot","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Declyn Schwarz","records":[{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2027-09-17"}]},{"name":"Deegan Macdonald","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Dingaan Zikhali","records":[{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Donald Enslin","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-01-09"}]},{"name":"Dumisani Chamane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2027-09-17"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-06-09"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Eugene Ross","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-05-07"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-10-14"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-04-21"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-04-21"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Fortune Ngcobo","records":[{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"France Ndlovu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"}]},{"name":"Gideon Kobus Nel","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Goodman Mkhize","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Hemal Kelowan","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-05-07"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2028-04-09"},{"comp":"4. Fall Arrest Technician","cat":"Equipment Operation","expiry":"2026-05-16"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2027-12-15"}]},{"name":"Innocent Sikosana","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-09-11"}]},{"name":"Ismail Ismail","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-05-02"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Israel Dlamini","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"}]},{"name":"Jaco Von Bargen","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-06-19"}]},{"name":"Jacques Durand","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Jason Hood","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Jeffrey Mfeka","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-02-27"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2028-01-15"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-01-15"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2026-01-15"}]},{"name":"Johannes Meintjes","records":[{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Justis Nxumalo","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Keagen Devy","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-07-24"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Kelvin Simpson","records":[{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2026-05-21"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Louis Van Rooyen","records":[{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2028-03-18"},{"comp":"4. Fall Arrest Technician","cat":"Equipment Operation","expiry":"2026-05-16"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2026-03-24"},{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2026-06-21"},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Luke Cheary","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-10-17"},{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2027-11-05"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Lungelo Malimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"}]},{"name":"Luvo Mbusi","records":[{"comp":"6. First Aid","cat":"First Aid","expiry":"2028-07-31"},{"comp":"12. Forklift Operator","cat":"Equipment Operation","expiry":"2026-11-28"}]},{"name":"Lwazi Mseleku","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Magic Abdool","records":[{"comp":"9. Scaffolding \u2013 Inspector","cat":"Equipment Operation","expiry":"2027-12-18"}]},{"name":"Majeeth Abdool","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-05-07"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Mark Fanner","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Melusi Mzelemi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-10-29"}]},{"name":"Michael Mcfarquhar","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Michael Payne","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-05"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2028-01-09"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2026-11-22"},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Mlekeleli Cibane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Nduduzo Mabuyakhulu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2025-10-26"}]},{"name":"Neeran Ramkisson","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-01-14"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-02-12"}]},{"name":"Nicholson Mthembu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Njabulo Dlamini","records":[{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2027-11-05"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-02-23"}]},{"name":"Nkosi Gumbi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Nkosi Matsengwana","records":[{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-28"},{"comp":"9. Scaffolding \u2013 Inspector","cat":"Equipment Operation","expiry":"2027-02-28"}]},{"name":"Nkosikhona Gumbi","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Nkosinathi Mtembu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-01-14"}]},{"name":"Nkosinathi Mthembu","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Nkululeko Phewa","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Percival Msomi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Philasande Menyuka","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-01-14"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-01-15"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-01-16"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Prakashan Brahmadu","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Sandile Khanyile","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-10-09"}]},{"name":"Sandile Ndlovu","records":[{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-03-15"}]},{"name":"Sanele Mjwara","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Sibongakonke Zondi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Sifiso Sikude","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-22"}]},{"name":"Sihle Gumede","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-09-02"}]},{"name":"Simon Mdluli","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Simphiwe Maphumulo","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Simphiwe Mzimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Siphelele Ndlovu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Siyanda Luhlongwane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Siyanda Mseleku","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"}]},{"name":"Sphamandla Magwaza","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Sphamandla Maphumulo","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Sphe Mfeka","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-07-24"}]},{"name":"Sphesihle Vuthela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-02-27"}]},{"name":"Sthembiso Ngcobo","records":[{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Stuart Mcadam","records":[{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Sylan Singleton Baldrey","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Thabane Ngidi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2026-03-18"}]},{"name":"Thabiso Linda","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-09-02"},{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2027-11-05"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-03-04"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-03-05"},{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-27"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Thami Myeza","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-09-11"},{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-27"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Thobani Mlondo","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Thulani Mkhwanazi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-18"}]},{"name":"Thuthukani Sibiya","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Vellem Musarara","records":[{"comp":"12. Forklift Operator","cat":"Equipment Operation","expiry":"2026-11-28"}]},{"name":"Vincent Mabuyakhulu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2025-10-26"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Warren Gibson","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-25"}]},{"name":"Wellington Mnyamana","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-02-27"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-09-30"}]},{"name":"Wesley Brahmadu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-09-02"}]},{"name":"William Linda","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2026-11-18"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Wynand Burger","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2026-05-28"}]},{"name":"Zakhele Gumede","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2026-02-20"},{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-09"},{"comp":"9. Scaffolding \u2013 Inspector","cat":"Equipment Operation","expiry":"2027-02-08"}]},{"name":"Zamokwakhe Mseleku","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Zandre Griffin","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-01-09"}]}],"competencies":[{"name":"1. Working At Heights","category":"Equipment Operation"},{"name":"8. HIRA","category":"Risk Assessment"},{"name":"10. Legal Liability","category":"Legal & Compliance"},{"name":"15c. Portable Elec \u2013 Hilti Drills","category":"Equipment Operation"},{"name":"13. Refrigeration & Trade Test","category":"Legal & Compliance"},{"name":"15a. Portable Elec \u2013 Angle Grinder","category":"Equipment Operation"},{"name":"15b. Portable Elec \u2013 Hilti DD120","category":"Equipment Operation"},{"name":"6. First Aid","category":"First Aid"},{"name":"11. Gas License","category":"Legal & Compliance"},{"name":"2. MEWP / Cherry Picker","category":"Equipment Operation"},{"name":"5. Fire Fighting \u2013 Basic","category":"Fire Safety"},{"name":"3. Confined Spaces","category":"Emergency Response"},{"name":"4. Fall Arrest Technician","category":"Equipment Operation"},{"name":"7. SHE Rep","category":"Legal & Compliance"},{"name":"12. Forklift Operator","category":"Equipment Operation"},{"name":"9. Scaffolding \u2013 Inspector","category":"Equipment Operation"},{"name":"9. Scaffolding \u2013 Erector","category":"Equipment Operation"}]};
+
 
 // ── SUPABASE ──────────────────────────────────────────────
 const SUPABASE_URL = 'https://bdozzouagbcyfxujtwhc.supabase.co';
@@ -2561,6 +2578,133 @@ function exportReportCSV(){
   showToast('CSV downloaded','⬇');
 }
 
+
+
+// ── TRAINING DATA IMPORT ─────────────────────────────────────────────────────
+async function runTrainingImport(){
+  const btn = document.getElementById('import-btn');
+  const status = document.getElementById('import-status');
+  const logEl = document.getElementById('import-log');
+  btn.disabled = true;
+  btn.textContent = '⏳ Importing…';
+  logEl.style.display = 'block';
+  logEl.innerHTML = '';
+
+  const log = (msg, color='var(--text-dim)') => {
+    logEl.innerHTML += `<div style="color:${color}">${msg}</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  try {
+    setSyncing(true);
+    const payload = IMPORT_PAYLOAD;
+
+    // ── Step 1: Ensure all competencies exist ──
+    log('📋 Checking competencies…');
+    const { data: existingComps } = await sb.from('competencies').select('id,name');
+    const compMap = {};
+    (existingComps||[]).forEach(c => compMap[c.name.toLowerCase()] = c.id);
+
+    let compsCreated = 0;
+    for (const comp of payload.competencies) {
+      const key = comp.name.toLowerCase();
+      if (!compMap[key]) {
+        const { data: newComp, error } = await sb.from('competencies').insert({
+          name: comp.name,
+          category: comp.category,
+          validity_months: 12,
+          mandatory: 'role',
+          renewal_method: 'Re-examination'
+        }).select().single();
+        if (error) { log(`  ⚠ Could not create competency "${comp.name}": ${error.message}`, 'var(--yellow)'); continue; }
+        compMap[key] = newComp.id;
+        compsCreated++;
+        log(`  ✅ Created competency: ${comp.name}`, 'var(--green)');
+      } else {
+        log(`  — Competency exists: ${comp.name}`);
+      }
+    }
+    log(`Competencies: ${compsCreated} created, ${payload.competencies.length - compsCreated} already present.`);
+
+    // ── Step 2: Reload staff cache so we have fresh IDs ──
+    await loadAll();
+    log('👥 Matching staff names…');
+
+    // Build name-to-id map (case-insensitive, trim)
+    const staffMap = {};
+    cache.staff.forEach(s => {
+      const full = `${s.fname} ${s.lname}`.toLowerCase().trim();
+      staffMap[full] = s.id;
+    });
+
+    // ── Step 3: Insert training records ──
+    let inserted = 0, skippedName = 0, skippedComp = 0, skippedDup = 0;
+    const unmatched = new Set();
+
+    // Fetch existing training records to avoid duplicates
+    const { data: existingTr } = await sb.from('training_records').select('staff_id,competency_id');
+    const existingSet = new Set((existingTr||[]).map(r => `${r.staff_id}:${r.competency_id}`));
+
+    log('📝 Inserting training records…');
+    for (const person of payload.staff) {
+      const nameKey = person.name.toLowerCase().trim();
+      const staffId = staffMap[nameKey];
+      if (!staffId) {
+        skippedName++;
+        unmatched.add(person.name);
+        continue;
+      }
+      for (const rec of person.records) {
+        const compId = compMap[rec.comp.toLowerCase()];
+        if (!compId) { skippedComp++; continue; }
+        const dupKey = `${staffId}:${compId}`;
+        if (existingSet.has(dupKey)) { skippedDup++; continue; }
+        const { error } = await sb.from('training_records').insert({
+          staff_id: staffId,
+          competency_id: compId,
+          date_completed: rec.expiry ? (() => { const d = new Date(rec.expiry); d.setFullYear(d.getFullYear()-1); return d.toISOString().split('T')[0]; })() : '2025-01-01',
+          expiry_date: rec.expiry || null,
+          provider: 'GaucheAir Training Matrix',
+          notes: 'Imported from Staff Training Matrix 29 Apr 2026',
+          created_by: currentUser.id
+        });
+        if (error) { log(`  ⚠ ${person.name} / ${rec.comp}: ${error.message}`, 'var(--yellow)'); continue; }
+        existingSet.add(dupKey);
+        inserted++;
+      }
+    }
+
+    await loadAll();
+    setSyncing(false);
+
+    // ── Summary ──
+    log('');
+    log('══ IMPORT COMPLETE ══════════════════════', 'var(--accent2)');
+    log(`  ✅ Records inserted:   ${inserted}`, 'var(--green)');
+    log(`  — Duplicates skipped: ${skippedDup}`);
+    log(`  ⚠ Names unmatched:   ${skippedName}`, skippedName > 0 ? 'var(--yellow)' : 'var(--text-dim)');
+    if (unmatched.size > 0) {
+      log('');
+      log('  Unmatched names (not in Staff Directory):', 'var(--yellow)');
+      [...unmatched].sort().forEach(n => log(`    · ${n}`, 'var(--yellow)'));
+    }
+
+    status.textContent = `Done — ${inserted} records imported, ${skippedName} names unmatched`;
+    status.style.color = 'var(--green)';
+    btn.textContent = '✅ Import Complete';
+    showToast(`Import done — ${inserted} records added`, '📥');
+    renderAdmin();
+
+  } catch(e) {
+    setSyncing(false);
+    btn.disabled = false;
+    btn.textContent = '📥 Run Import';
+    status.textContent = 'Error: ' + e.message;
+    status.style.color = 'var(--red)';
+    log('❌ Fatal error: ' + e.message, 'var(--red)');
+    showToast(e.message, '❌');
+  }
+}
 
 // ── INIT ──────────────────────────────────────────────────
 (async()=>{

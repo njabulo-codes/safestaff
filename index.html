@@ -445,8 +445,6 @@ tbody td { padding:14px 16px; font-size:13px; }
         <div class="login-sub">OHS Manager · v6</div>
       </div>
     </div>
-    </div>
-    </div>
     <div class="login-err" id="login-err"></div>
     <div class="login-field">
       <label class="login-label">Email Address</label>
@@ -542,7 +540,6 @@ tbody td { padding:14px 16px; font-size:13px; }
             <button class="filter-tab" onclick="filterStaff('active',this)">Active</button>
             <button class="filter-tab" onclick="filterStaff('inactive',this)">Inactive</button>
           </div>
-          <button class="btn btn-ghost btn-sm" id="staff-sort-btn" onclick="toggleStaffSort()" style="margin-left:4px;font-family:'IBM Plex Mono',monospace;font-size:11px">⇅ A–Z</button>
           <button class="btn btn-primary" style="margin-left:8px" onclick="openAddStaff()">＋ Add Staff</button>
         </div>
         <div class="table-wrap table-scroll"><table>
@@ -1307,7 +1304,6 @@ function renderView(v){
 }
 
 let _staffSearchQ='';
-let _staffSortAZ=false;
 function handleSearch(q){
   _staffSearchQ=q;
   if(currentView==='staff') renderStaff(document.querySelector('#view-staff .filter-tab.active')?.textContent?.toLowerCase()||'all',q);
@@ -1366,7 +1362,6 @@ function updateBadges(){
 function renderStaff(filter,q=''){
   let list=filter==='active'?cache.staff.filter(s=>s.active):filter==='inactive'?cache.staff.filter(s=>!s.active):cache.staff;
   if(q) list=list.filter(s=>`${s.fname} ${s.lname} ${s.eid} ${s.role}`.toLowerCase().includes(q.toLowerCase()));
-  if(_staffSortAZ) list=[...list].sort((a,b)=>(a.lname+a.fname).localeCompare(b.lname+b.fname));
   document.getElementById('staff-count-lbl').textContent=`${list.length} member${list.length!==1?'s':''}`;
   const tbody=document.getElementById('staff-tbody');
   if(!list.length){tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👥</div><div class="empty-title">No staff found</div></div></td></tr>`;return;}
@@ -1376,13 +1371,6 @@ function renderStaff(filter,q=''){
     const badge=s.active?'<span class="badge badge-green"><span class="badge-dot"></span>Active</span>':'<span class="badge badge-red"><span class="badge-dot"></span>Inactive</span>';
     return`<tr onclick="openDetail(${s.id})"><td><div class="staff-cell">${avatarHtml}<div><div class="staff-name">${s.fname} ${s.lname}</div><div class="staff-id">${s.eid}</div></div></div></td><td>${s.dept_name}</td><td>${s.role}</td><td><span class="badge badge-blue">${s.emptype||'Full-time'}</span></td><td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${s.top_size||'—'} / ${s.pants_size||'—'}</td><td>${badge}</td><td onclick="event.stopPropagation()"><div class="actions-cell"><div class="icon-btn" onclick="openDetail(${s.id})" title="View">👁</div><div class="icon-btn" onclick="openEditStaff(${s.id})" title="Edit">✏️</div><div class="icon-btn warning" onclick="openOffboard(${s.id})" title="Offboard">🚪</div><div class="icon-btn danger" onclick="deleteStaff(${s.id},'${s.fname} ${s.lname}')" title="Delete">🗑</div></div></td></tr>`;
   }).join('');
-}
-function toggleStaffSort(){
-  _staffSortAZ=!_staffSortAZ;
-  const btn=document.getElementById('staff-sort-btn');
-  btn.textContent=_staffSortAZ?'⇅ A–Z ✓':'⇅ A–Z';
-  btn.classList.toggle('active',_staffSortAZ);
-  renderStaff(document.querySelector('#view-staff .filter-tab.active')?.textContent?.toLowerCase()||'all',_staffSearchQ);
 }
 function filterStaff(f,el){document.querySelectorAll('#view-staff .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderStaff(f,_staffSearchQ);}
 

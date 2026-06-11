@@ -1,9 +1,234 @@
 <!DOCTYPE html>
+<!--
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  SafeStaff OHS — v7 "Expert Tier"                                                      ║
+║  Occupational Health & Safety Compliance Management System                             ║
+║  GaucheAir Air Conditioning Services · ~115 staff · South Africa (en-ZA locale)        ║
+║                                                                                        ║
+║  SYSTEM ANALYSIS & DESIGN — INLINE TECHNICAL DOCUMENTATION                             ║
+║  This block is the authoritative engineering reference for the application.            ║
+║  Keep it updated with every version bump.                                              ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════════════════════════════════
+1. EXECUTIVE OVERVIEW
+════════════════════════════════════════════════════════════════════════════════════════
+SafeStaff is a single-file, zero-build web application that operationalises an ISO 45001
+aligned OHS management system for a ~115-person HVAC services workforce. It centralises:
+
+  · Personnel master data (staff, departments, uniforms sizing)
+  · Competence management (framework, training records, skills matrix)
+  · Health surveillance (occupational medicals, fitness outcomes)
+  · Operational control (client sites, site inductions, expiry windows)
+  · Worker consultation (toolbox talk log with attendance & sign-off)
+  · Incident management (injury / near-miss / hazard register, corrective actions)
+  · Continuous monitoring (real-time alerts, badges, ISO 45001 clause monitor)
+  · Evidence & reporting (document vault, audit trail, 7 report types incl. the
+    Monthly OHS Report and CSV / print-to-PDF export)
+
+Design philosophy: "compliance by construction" — every operational record captured in
+day-to-day use doubles as audit evidence, so ISO conformity scoring and management
+reporting require ZERO additional data entry.
+
+════════════════════════════════════════════════════════════════════════════════════════
+2. ARCHITECTURE
+════════════════════════════════════════════════════════════════════════════════════════
+Pattern: 3-tier, thick-client SPA. No framework, no bundler, no server code to maintain.
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ PRESENTATION   index.html — semantic views + modals, CSS custom     │
+  │                properties (dual theme), print stylesheet            │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │ APPLICATION    Vanilla ES2020 in one <script>:                      │
+  │                · in-memory cache (single source of truth per session)│
+  │                · render functions (pure: cache → DOM)               │
+  │                · CRUD controllers (Supabase writes → reload → render)│
+  │                · compliance engine (status fns + ISO scoring)       │
+  │                · report engine (tabular + composite monthly report) │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │ DATA           Supabase (PostgreSQL + Auth + RLS)                   │
+  │                project bdozzouagbcyfxujtwhc · publishable key only  │
+  └─────────────────────────────────────────────────────────────────────┘
+
+Hosting: GitHub Pages (static). Deployment = commit one file. Rollback = revert commit.
+Why single-file: zero build chain, trivially auditable diffs between versions, no
+dependency rot beyond the supabase-js CDN pin, and the entire system is portable as a
+single artefact — ideal for a small-business compliance tool with one product owner.
+
+Data flow (unidirectional):
+  user action → CRUD controller → Supabase mutation → loadAll() refresh →
+  renderView(currentView) → DOM. The cache is never mutated optimistically; the DB is
+  always the source of truth, eliminating drift between clients.
+
+════════════════════════════════════════════════════════════════════════════════════════
+3. DATA MODEL (ERD)
+════════════════════════════════════════════════════════════════════════════════════════
+  departments 1───* staff 1───* training_records *───1 competencies
+                      │ 1                                        
+                      ├───* medicals                             
+                      ├───* site_inductions *───1 sites          
+                      ├───* staff_documents (base64 PDF/JPG/PNG) 
+                      └───* activity_log (audit trail)           
+  incidents      — staff_involved: JSON int[] of staff.id (soft link, survives offboard)
+  toolbox_talks  — attendees:      JSON int[] of staff.id (soft link)
+  user_profiles  — 1:1 with auth.users; holds role for RBAC
+
+  Table              Key columns (beyond id/created_at)
+  ─────────────────  ────────────────────────────────────────────────────────────────
+  staff              fname,lname,eid,dob,email,phone,dept_id,role,emptype,start_date,
+                     address,emerg_contact,emerg_phone,top_size,pants_size,
+                     photo_base64,active,offboard_date,offboard_reason
+  departments        name,head,location
+  competencies       name,category,mandatory(yes|role|no),validity_months,
+                     renewal_method,description
+  training_records   staff_id,competency_id,date_completed,expiry_date,provider,
+                     cert_number,notes
+  medicals           staff_id,exam_type,outcome(fit|fit-restrictions|unfit-temp|
+                     unfit|referred),exam_date,expiry_date,doctor,cert_number,notes
+  sites              name,client_name,city,address,contact_*,induction_validity_months,notes
+  site_inductions    staff_id,site_id,inducted_date,expiry_date,ref,notes
+  incidents          incident_type(Injury|Near-Miss|Property Damage|Environmental|
+                     Hazard Identified|Other),severity(Critical|High|Medium|Low),
+                     incident_datetime,location,witnesses,staff_involved,description,
+                     immediate_action,status(Open|Investigating|Closed),
+                     corrective_action,closure_date,reported_by,reported_by_name
+  toolbox_talks      talk_date,topic,category,facilitator,attendees,duration_minutes,
+                     key_points,actions_arising,sign_off,created_by
+  staff_documents    staff_id,doc_type,title,expiry_date,file_base64,mime
+  activity_log       staff_id,action,item,status,performed_by — append-only audit trail
+  user_profiles      id(auth uid),email,full_name,role,active
+
+════════════════════════════════════════════════════════════════════════════════════════
+4. MODULE CATALOGUE → ISO 45001:2018 CLAUSE MAP
+════════════════════════════════════════════════════════════════════════════════════════
+  Module / View          Primary ISO 45001 clause(s)         Evidence produced
+  ─────────────────────  ──────────────────────────────────  ───────────────────────────
+  Staff & Departments    4.3 Scope · 5.3 Roles               Workforce register
+  Competency Framework   7.2 Competence (requirements)       Defined competence criteria
+  Training Records       7.2 Competence (fulfilment)         Certs, expiry, provider
+  Skills Matrix          7.2 / 9.1                           Gap visualisation
+  Medical Records        9.1 Monitoring · 8.1.2 (health)     Surveillance + fitness
+  Sites & Inductions     8.1 Operational planning & control  Site-access control
+  Toolbox Talks          5.4 Consultation & participation ·
+                         7.3 Awareness                       Talk log, attendance, sign-off
+  Incident Register      6.1.2 Hazard ID · 10.2 Incident,
+                         nonconformity & corrective action   Register + RCA + closure
+  Alerts                 9.1 Monitoring (proactive)          Expiry surveillance
+  Document Vault         7.5 Documented information          Controlled evidence store
+  Activity Log           7.5.3 Control of documented info    Tamper-evident audit trail
+  Reports + Monthly      9.1.1 Evaluation · 9.3 Management
+                         review                              Management-review inputs
+  ISO 45001 Monitor      Whole-of-system                     Live clause conformity score
+  Offboarding            7.5 (retention)                     Records retained post-exit
+
+════════════════════════════════════════════════════════════════════════════════════════
+5. COMPLIANCE ENGINE SPECIFICATION
+════════════════════════════════════════════════════════════════════════════════════════
+5.1 Record status functions (pure, date-driven):
+  tStatus(expiry)   training:  expired <0d · expiring ≤90d · else current
+                    (no expiry ⇒ current: permanent competency)
+  mStatus(expiry)   medical:   expired <0d · expiring ≤90d · else current
+                    (no expiry ⇒ expired: surveillance must have a review date)
+  indStatus(expiry) induction: expired <0d · expiring ≤30d · else current
+                    (tighter window — site access is binary and client-enforced)
+
+5.2 ISO clause scoring (computeISOMetrics / ISO_CLAUSES, v7):
+  Each monitored clause is scored 0–100 from live sub-metrics; percentages map
+  directly, count-based metrics scale linearly to an explicit target (e.g. ≥6 toolbox
+  talks per rolling 90 days ⇒ score = min(100, talks/6×100)). Clause score = mean of
+  available sub-metric scores; clauses with no applicable data report "No data" and
+  are excluded from the overall figure. Overall score = unweighted mean of scored
+  clauses. Status bands: ≥85 Conformant · 60–84 Partial · <60 Attention.
+  Rationale: bands mirror typical external-audit major/minor nonconformity intuition
+  while staying deliberately simple enough for a layperson to interrogate.
+
+5.3 Monthly KPI formulas (generateMonthlyReport, v7):
+  LTIFR  = lost-time injuries × 1,000,000 ÷ man-hours worked in month
+  TRIFR  = recordable injuries × 1,000,000 ÷ man-hours worked in month
+  Operating assumptions (documented in the report footer):
+    · "Recordable injury"  = incident_type 'Injury'
+    · "Lost-time injury"   = 'Injury' with severity Critical or High (proxy until a
+      dedicated lost_days field is added — see roadmap)
+    · Man-hours default    = active headcount × 195 h/month (45 h-week × 4.33),
+      editable at generation time so payroll-actual hours can be substituted.
+  Near-miss ratio = near-misses : injuries (leading-indicator health check; a mature
+  reporting culture targets ≥ 10:1).
+
+════════════════════════════════════════════════════════════════════════════════════════
+6. SECURITY MODEL
+════════════════════════════════════════════════════════════════════════════════════════
+  · AuthN: Supabase email/password sessions (JWT, auto-refresh, restored on load).
+  · AuthZ (RBAC via user_profiles.role):
+      role         UI capability
+      ───────────  ─────────────────────────────────────────────
+      admin        everything + Admin Panel + Offboarding
+      ohs_officer  create/edit OHS records (canEdit)
+      hr           create/edit staff & records (canEdit)
+      viewer       read-only (default for new accounts)
+    UI gating is convenience only — true enforcement is Supabase Row Level Security;
+    the browser ships a publishable (anon) key with no privileged rights.
+  · XSS posture (v7): esc() HTML-entity encoder applied to free-text user content
+    rendered with innerHTML (incident descriptions/actions, toolbox notes, report
+    cells in new modules). Structured/enumerated fields are rendered as-is.
+  · Documents/photos are base64 in Postgres → inherit the same RLS perimeter; no
+    separate storage bucket ACLs to misconfigure (trade-off: row size; see roadmap).
+
+════════════════════════════════════════════════════════════════════════════════════════
+7. STATE & RENDERING PIPELINE
+════════════════════════════════════════════════════════════════════════════════════════
+  · cache{}            session source of truth; refreshed atomically by loadAll()
+                       (single Promise.all of 10 joined selects — v7 merged the former
+                       v5 runtime patch into the core function per the "no fragile
+                       patches" principle).
+  · currentView        active view key; switchView() owns nav state, topbar title/CTA.
+  · viewState{}        v7: persisted filter-tab selection per view, so returning to a
+                       view restores the user's last filter (state-persistence rule).
+  · localStorage       theme, dismissed/snoozed alert keys (client-local by design —
+                       alert triage is a per-user working preference, not a record).
+  · Rendering          renderView(v) dispatches to a pure render fn that reads cache
+                       and writes innerHTML. No virtual DOM; tables of ≤ a few hundred
+                       rows re-render in <16ms on commodity hardware.
+
+════════════════════════════════════════════════════════════════════════════════════════
+8. CONVENTIONS & EXTENSION GUIDE
+════════════════════════════════════════════════════════════════════════════════════════
+  Adding a view (checklist):
+    1. <div class="view" id="view-X"> markup in .content
+    2. sidebar .nav-item with switchView('X',this)
+    3. VIEW_TITLES['X'], CTA_MAP['X'] entries
+    4. renderX() + entry in renderView() dispatch map (+ viewState if it has filters)
+    5. If backed by a new table: add select to loadAll(), cache key, SQL migration,
+       RLS policy, and a row in the §4 clause map above.
+  Naming: render*/open*/save*/delete* verbs; modal ids modal-*; element id prefixes
+  per module (sf- staff, tr- training, med-, st- site, ind-, inc-, tb-, mr- monthly).
+  Dates: ISO yyyy-mm-dd in DB, fmt() for display (en-ZA), daysUntil() for windows.
+  All user-entered free text rendered via innerHTML MUST pass through esc().
+
+  Roadmap (agreed with product owner):
+    · Uniforms register integration (data already extracted from Excel)
+    · lost_days column on incidents → exact LTIFR; monthly_stats table for payroll
+      man-hours → remove the headcount estimate
+    · Supabase Storage migration for documents if base64 volume grows
+    · Per-clause weighting config for the ISO engine
+
+════════════════════════════════════════════════════════════════════════════════════════
+9. VERSION HISTORY
+════════════════════════════════════════════════════════════════════════════════════════
+  v1–v3  Staff directory, competency framework, training records, bulk Excel import
+  v4     Medicals, alerts (dismiss/snooze), sites & inductions, documents, offboarding,
+         skills matrix, admin panel
+  v5     Incident & hazard register, toolbox talks, reports/export module
+  v6     UI system overhaul, dark/light theming, audit fixes, logo revert to shield
+  v7     EXPERT TIER: ISO 45001 clause monitor + live conformity scoring · Monthly OHS
+         Report generator (KPIs, LTIFR/TRIFR, MoM trends, look-ahead, exec summary) ·
+         loadAll() patch merged into core · per-view filter-state persistence ·
+         esc() XSS hardening on free-text rendering · this inline documentation
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SafeStaff OHS v6</title>
+<title>SafeStaff OHS v7</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -419,6 +644,61 @@ tbody td { padding:14px 16px; font-size:13px; }
 .report-table tr:hover td { background:var(--surface2); }
 
 /* PRINT STYLES */
+/* ═══════════════════════════════
+   v7 — ISO 45001 MONITOR
+═══════════════════════════════ */
+.iso-hero { display:grid; grid-template-columns:230px 1fr; gap:16px; margin-bottom:20px; }
+.iso-gauge-card { background:rgba(var(--surface-rgb),.95); border:1px solid var(--border); border-radius:var(--r-lg); padding:20px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; box-shadow:var(--shadow-sm); }
+.iso-gauge { width:148px; height:148px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.iso-gauge-inner { width:114px; height:114px; border-radius:50%; background:var(--surface); display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:inset 0 0 12px rgba(0,0,0,.15); }
+.iso-gauge-val { font-size:32px; font-weight:800; letter-spacing:-1.5px; }
+.iso-gauge-lbl { font-size:8.5px; color:var(--text-muted); font-family:'IBM Plex Mono',monospace; letter-spacing:1.5px; text-transform:uppercase; margin-top:2px; }
+.iso-summary-card { background:rgba(var(--surface-rgb),.95); border:1px solid var(--border); border-radius:var(--r-lg); padding:18px 20px; box-shadow:var(--shadow-sm); display:flex; flex-direction:column; gap:12px; }
+.iso-status-row { display:flex; gap:10px; flex-wrap:wrap; }
+.iso-chip-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.kpi-chip { background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:11px 13px; }
+.kpi-chip-val { font-size:19px; font-weight:800; letter-spacing:-.5px; }
+.kpi-chip-lbl { font-size:9.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.8px; margin-top:2px; }
+.iso-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; }
+.iso-clause-card { background:rgba(var(--surface-rgb),.95); border:1px solid var(--border); border-left:3px solid var(--clause-color,var(--accent)); border-radius:var(--r-md); padding:16px 18px; transition:transform .15s, box-shadow .15s; }
+.iso-clause-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); }
+.iso-clause-head { display:flex; align-items:flex-start; gap:10px; margin-bottom:4px; }
+.iso-clause-ref { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:1px; color:var(--clause-color,var(--accent)); background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-full); padding:3px 9px; flex-shrink:0; margin-top:1px; }
+.iso-clause-title { font-size:13px; font-weight:700; line-height:1.35; flex:1; }
+.iso-clause-score { font-size:17px; font-weight:800; color:var(--clause-color,var(--accent)); flex-shrink:0; }
+.iso-bar { height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; margin:10px 0 11px; }
+.iso-bar-fill { height:100%; border-radius:999px; background:var(--clause-color,var(--accent)); transition:width .6s ease; }
+.iso-metric { display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:11.5px; padding:5px 0; border-bottom:1px dashed var(--border); color:var(--text-dim); }
+.iso-metric:last-of-type { border-bottom:none; }
+.iso-metric b { color:var(--text); font-weight:600; font-family:'IBM Plex Mono',monospace; font-size:11px; }
+.iso-evidence-btn { margin-top:10px; font-size:11px; color:var(--accent2); cursor:pointer; font-weight:600; }
+.iso-evidence-btn:hover { text-decoration:underline; }
+.iso-foot { margin-top:18px; font-size:10.5px; color:var(--text-muted); line-height:1.8; background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px 16px; }
+@media (max-width:1100px){ .iso-hero{grid-template-columns:1fr} .iso-chip-grid{grid-template-columns:repeat(2,1fr)} }
+
+/* ═══════════════════════════════
+   v7 — MONTHLY OHS REPORT
+═══════════════════════════════ */
+.report-card-featured { grid-column:span 2; border:1px solid rgba(var(--accent-rgb),.4); background:linear-gradient(130deg,rgba(var(--accent-rgb),.12),rgba(var(--surface-rgb),.95) 55%); }
+.mr-exec { background:rgba(var(--accent-rgb),.07); border:1px solid rgba(var(--accent-rgb),.2); border-radius:var(--r-sm); padding:14px 16px; font-size:12.5px; line-height:1.85; margin-bottom:16px; }
+.mr-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:6px; }
+.mr-kpi { background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px 13px; }
+.mr-kpi-val { font-size:19px; font-weight:800; letter-spacing:-.5px; }
+.mr-kpi-lbl { font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.8px; margin-top:3px; }
+.mr-kpi-sub { font-size:9.5px; color:var(--text-muted); margin-top:2px; font-family:'IBM Plex Mono',monospace; }
+.mr-section-title { font-size:13px; font-weight:800; margin:22px 0 8px; display:flex; align-items:center; gap:8px; letter-spacing:-.2px; }
+.mr-delta { font-size:9.5px; font-family:'IBM Plex Mono',monospace; padding:2px 7px; border-radius:var(--r-full); margin-left:6px; }
+.mr-delta.good { background:var(--green-bg); color:var(--green); }
+.mr-delta.bad { background:var(--red-bg); color:var(--red); }
+.mr-delta.flat { background:var(--surface3); color:var(--text-dim); }
+.mr-note { font-size:10px; color:var(--text-muted); line-height:1.7; margin-top:18px; border-top:1px dashed var(--border); padding-top:10px; }
+@media print {
+  .mr-kpi, .mr-exec, .kpi-chip { border:1px solid #bbb !important; background:#fff !important; }
+  .mr-kpi-val, .mr-exec, .mr-section-title { color:#000 !important; }
+  .mr-kpi-lbl, .mr-kpi-sub, .mr-note { color:#444 !important; }
+  .mr-delta { border:1px solid #999 !important; color:#333 !important; background:#f5f5f5 !important; }
+}
+
 @media print {
   .sidebar, .topbar, .modal-close, .modal-footer, .report-actions-bar { display:none !important; }
   body { background:#fff !important; color:#000 !important; }
@@ -442,7 +722,7 @@ tbody td { padding:14px 16px; font-size:13px; }
       <div class="login-shield">🛡</div>
       <div>
         <div class="login-title">SafeStaff</div>
-        <div class="login-sub">OHS Manager · v6</div>
+        <div class="login-sub">OHS Manager · v7</div>
       </div>
     </div>
     <div class="login-err" id="login-err"></div>
@@ -467,7 +747,7 @@ tbody td { padding:14px 16px; font-size:13px; }
         <div class="logo-shield">🛡</div>
         <div>
           <div class="logo-text">SafeStaff</div>
-          <div class="logo-sub">OHS Manager · v6</div>
+          <div class="logo-sub">OHS Manager · v7</div>
         </div>
       </div>
     </div>
@@ -487,6 +767,7 @@ tbody td { padding:14px 16px; font-size:13px; }
       <div class="nav-item" onclick="switchView('toolbox',this)"><span class="nav-icon">🗣</span> Toolbox Talks</div>
       <div class="nav-section-label">Reports</div>
       <div class="nav-item" onclick="switchView('reports',this)"><span class="nav-icon">📊</span> Reports</div>
+      <div class="nav-item" onclick="switchView('iso',this)"><span class="nav-icon">📐</span> ISO 45001</div>
       <div class="nav-item" onclick="switchView('matrix',this)"><span class="nav-icon">⬛</span> Skills Matrix</div>
       <div class="nav-section-label">Administration</div>
       <div class="nav-item admin-only" onclick="switchView('admin',this)"><span class="nav-icon">⚙️</span> Admin Panel</div>
@@ -654,20 +935,7 @@ tbody td { padding:14px 16px; font-size:13px; }
             <tbody id="users-tbody"></tbody>
           </table></div>
         </div>
-        <div class="admin-section" id="import-section">
-          <div class="admin-section-title"><span>📥</span> Training Data Import</div>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.6">
-            Import <strong>208 training records</strong> for <strong>104 staff members</strong> from the GaucheAir Staff Training Matrix (29 Apr 2026).
-            The import will match staff by name, create any missing competencies, and insert training records.
-            Records for unmatched names are skipped and reported. This operation is safe to run once — existing records are not duplicated.
-          </p>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn btn-primary" id="import-btn" onclick="runTrainingImport()">📥 Run Import</button>
-            <span id="import-status" style="font-size:12px;color:var(--text-dim)"></span>
-          </div>
-          <div id="import-log" style="margin-top:14px;max-height:260px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.7;display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px"></div>
-        </div>
-      <div class="admin-section">
+        <div class="admin-section">
           <div class="admin-section-title"><span>🗄️</span> Database Stats</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px" id="db-stats"></div>
         </div>
@@ -731,12 +999,37 @@ tbody td { padding:14px 16px; font-size:13px; }
       <div class="view" id="view-reports">
         <div class="section-header"><div class="section-title">Reports &amp; Export</div></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" id="report-cards">
+          <div class="report-card report-card-featured" onclick="openMonthlyReport()"><div class="report-card-icon">📄</div><div class="report-card-title">Monthly OHS Report <span class="badge badge-purple" style="margin-left:8px;vertical-align:middle">New · v7</span></div><div class="report-card-desc">Board-ready monthly summary: executive narrative, LTIFR / TRIFR &amp; near-miss ratio, incident analysis, consultation &amp; training activity, next-month expiry look-ahead, month-over-month trends, and the live ISO 45001 clause self-assessment. Print to PDF or export CSV.</div><button class="btn btn-primary btn-sm">Generate Monthly Report</button></div>
           <div class="report-card" onclick="generateReport('compliance')"><div class="report-card-icon">📋</div><div class="report-card-title">Staff Compliance Summary</div><div class="report-card-desc">All active staff with training &amp; medical status and overall compliance %</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
           <div class="report-card" onclick="openExpiryReport()"><div class="report-card-icon">⏳</div><div class="report-card-title">Expiring Certifications</div><div class="report-card-desc">Training and medicals expiring within 30, 60, or 90 days</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
           <div class="report-card" onclick="generateReport('sites')"><div class="report-card-icon">🏗</div><div class="report-card-title">Site Induction Status</div><div class="report-card-desc">Per-site: who is inducted, who has expired, who is not inducted</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
           <div class="report-card" onclick="generateReport('medical')"><div class="report-card-icon">🏥</div><div class="report-card-title">Medical Fitness Roster</div><div class="report-card-desc">All staff with current medical outcome, doctor, and expiry date</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
           <div class="report-card" onclick="generateReport('activity')"><div class="report-card-icon">📜</div><div class="report-card-title">Full Activity Log</div><div class="report-card-desc">Chronological log of all system actions for audit and compliance</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
           <div class="report-card" onclick="generateReport('incidents')"><div class="report-card-icon">⚠️</div><div class="report-card-title">Incident Register Export</div><div class="report-card-desc">Complete incident and hazard register with status and corrective actions</div><button class="btn btn-primary btn-sm">Generate Report</button></div>
+        </div>
+      </div>
+
+      <!-- ISO 45001 COMPLIANCE MONITOR (v7) -->
+      <div class="view" id="view-iso">
+        <div class="section-header">
+          <div class="section-title">ISO 45001 Compliance Monitor</div>
+          <div class="section-count" id="iso-updated-lbl">—</div>
+          <button class="btn btn-primary" style="margin-left:auto" onclick="openMonthlyReport()">📄 Monthly OHS Report</button>
+        </div>
+        <div class="iso-hero">
+          <div class="iso-gauge-card">
+            <div class="iso-gauge" id="iso-gauge"><div class="iso-gauge-inner"><div class="iso-gauge-val" id="iso-gauge-val">—</div><div class="iso-gauge-lbl">Overall Score</div></div></div>
+            <div id="iso-overall-badge"></div>
+          </div>
+          <div class="iso-summary-card">
+            <div style="font-size:13px;font-weight:700">Live conformity against monitored ISO 45001:2018 clauses</div>
+            <div class="iso-status-row" id="iso-status-row"></div>
+            <div class="iso-chip-grid" id="iso-chip-grid"></div>
+          </div>
+        </div>
+        <div class="iso-grid" id="iso-grid"></div>
+        <div class="iso-foot">
+          <strong>Methodology.</strong> Each clause is scored 0–100 from live operational data — percentages map directly; count-based indicators scale linearly to the stated target. Clause score = mean of its sub-metrics; overall score = mean of clauses with data. Bands: <strong>≥85 Conformant</strong> · <strong>60–84 Partial</strong> · <strong>&lt;60 Attention</strong>. Scores are a management self-assessment aid, not a substitute for external certification audit. Full formula specification is documented in the technical header of this file.
         </div>
       </div>
 
@@ -1099,15 +1392,28 @@ tbody td { padding:14px 16px; font-size:13px; }
 </div>
 
 
+<!-- MONTHLY OHS REPORT PARAMETERS (v7) -->
+<div class="modal-overlay" id="modal-monthly">
+  <div class="modal" style="width:440px">
+    <div class="modal-header"><div><div class="modal-title">Monthly OHS Report</div><div class="modal-sub">ISO 45001-ready management summary</div></div><div class="modal-close" onclick="closeModal('modal-monthly')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-grid full">
+        <div class="form-group"><label class="form-label">Reporting Month *</label><input class="form-input" id="mr-month" type="month"></div>
+        <div class="form-group"><label class="form-label">Man-Hours Worked</label><input class="form-input" id="mr-hours" type="number" min="0">
+          <div class="form-hint">Auto-estimated as active staff × 195 h/month (45 h-week × 4.33). Replace with payroll-actual hours for precise LTIFR / TRIFR.</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-monthly')">Cancel</button><button class="btn btn-primary" onclick="generateMonthlyReport()">Generate Report</button></div>
+  </div>
+</div>
+
+
 <div class="toast" id="toast"><span id="toast-icon">✅</span> <span id="toast-msg"></span></div>
 
 <!-- ══ SCRIPT ════════════════════════════════════════════════ -->
 <script>
 'use strict';
-
-// ── TRAINING IMPORT PAYLOAD (GaucheAir 29 Apr 2026) ──────────
-const IMPORT_PAYLOAD = {"staff":[{"name":"Aaron Brandt","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-04-21"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-04-21"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Aidan Bollaert","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2026-05-21"},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Alec Isemonger","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Allen Ngubane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-26"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-06-09"}]},{"name":"Andile Khanyezi","records":[{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Andile Mzimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-05-02"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2029-01-15"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2026-01-15"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-01-15"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Bheka Mzimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Bongani Mgenge","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-05-02"}]},{"name":"Bongani Mwelase","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-05"}]},{"name":"Bongumusa Gcabashe","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Bossie Boshoff","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-12-15"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2028-09-08"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-04-15"}]},{"name":"Brad Gauche","records":[{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Brandon Walker","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Brett Van Niekerk","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Cameron Egan","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Clement Gumbi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-11"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2026-10-12"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2026-05-28"}]},{"name":"Clement Mnguni","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-10-29"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"}]},{"name":"Craig Seegers","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Damiane Naidoo","records":[{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Danny Naidoo","records":[{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-03-04"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-03-05"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"David Nyahundzvi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-10-29"}]},{"name":"Deacon Elliot","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Declyn Schwarz","records":[{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2027-09-17"}]},{"name":"Deegan Macdonald","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Dingaan Zikhali","records":[{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Donald Enslin","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-01-09"}]},{"name":"Dumisani Chamane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2027-09-17"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-06-09"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Eugene Ross","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-05-07"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-10-14"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-04-21"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2028-04-21"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Fortune Ngcobo","records":[{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"France Ndlovu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"}]},{"name":"Gideon Kobus Nel","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Goodman Mkhize","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Hemal Kelowan","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-05-07"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2028-04-09"},{"comp":"4. Fall Arrest Technician","cat":"Equipment Operation","expiry":"2026-05-16"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2027-12-15"}]},{"name":"Innocent Sikosana","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-09-11"}]},{"name":"Ismail Ismail","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-05-02"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Israel Dlamini","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"}]},{"name":"Jaco Von Bargen","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-06-19"}]},{"name":"Jacques Durand","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Jason Hood","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Jeffrey Mfeka","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-02-27"},{"comp":"5. Fire Fighting \u2013 Basic","cat":"Fire Safety","expiry":"2028-01-15"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-01-15"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2026-01-15"}]},{"name":"Johannes Meintjes","records":[{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Justis Nxumalo","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Keagen Devy","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-07-24"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null}]},{"name":"Kelvin Simpson","records":[{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2026-05-21"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Louis Van Rooyen","records":[{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2028-03-18"},{"comp":"4. Fall Arrest Technician","cat":"Equipment Operation","expiry":"2026-05-16"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2026-03-24"},{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2026-06-21"},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Luke Cheary","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-10-17"},{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2027-11-05"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Lungelo Malimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"}]},{"name":"Luvo Mbusi","records":[{"comp":"6. First Aid","cat":"First Aid","expiry":"2028-07-31"},{"comp":"12. Forklift Operator","cat":"Equipment Operation","expiry":"2026-11-28"}]},{"name":"Lwazi Mseleku","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Magic Abdool","records":[{"comp":"9. Scaffolding \u2013 Inspector","cat":"Equipment Operation","expiry":"2027-12-18"}]},{"name":"Majeeth Abdool","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-05-07"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Mark Fanner","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"},{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Melusi Mzelemi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-10-29"}]},{"name":"Michael Mcfarquhar","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Michael Payne","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-05"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2028-01-09"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2026-11-22"},{"comp":"13. Refrigeration & Trade Test","cat":"Legal & Compliance","expiry":null}]},{"name":"Mlekeleli Cibane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Nduduzo Mabuyakhulu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2025-10-26"}]},{"name":"Neeran Ramkisson","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-01-14"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2027-02-12"}]},{"name":"Nicholson Mthembu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Njabulo Dlamini","records":[{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2027-11-05"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-02-23"}]},{"name":"Nkosi Gumbi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Nkosi Matsengwana","records":[{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-28"},{"comp":"9. Scaffolding \u2013 Inspector","cat":"Equipment Operation","expiry":"2027-02-28"}]},{"name":"Nkosikhona Gumbi","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Nkosinathi Mtembu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-01-14"}]},{"name":"Nkosinathi Mthembu","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Nkululeko Phewa","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Percival Msomi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Philasande Menyuka","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-01-14"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-01-15"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-01-16"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Prakashan Brahmadu","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Sandile Khanyile","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-10-09"}]},{"name":"Sandile Ndlovu","records":[{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2028-03-15"}]},{"name":"Sanele Mjwara","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Sibongakonke Zondi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Sifiso Sikude","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-22"}]},{"name":"Sihle Gumede","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-09-02"}]},{"name":"Simon Mdluli","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Simphiwe Maphumulo","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Simphiwe Mzimela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Siphelele Ndlovu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Siyanda Luhlongwane","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-11-12"}]},{"name":"Siyanda Mseleku","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-10-01"}]},{"name":"Sphamandla Magwaza","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Sphamandla Maphumulo","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Sphe Mfeka","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-07-24"}]},{"name":"Sphesihle Vuthela","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-02-27"}]},{"name":"Sthembiso Ngcobo","records":[{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Stuart Mcadam","records":[{"comp":"11. Gas License","cat":"Legal & Compliance","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Sylan Singleton Baldrey","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Thabane Ngidi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-06"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2026-03-18"}]},{"name":"Thabiso Linda","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-09-02"},{"comp":"7. SHE Rep","cat":"Legal & Compliance","expiry":"2027-11-05"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-03-04"},{"comp":"10. Legal Liability","cat":"Legal & Compliance","expiry":"2027-03-05"},{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-27"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Thami Myeza","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2026-09-11"},{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-27"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Thobani Mlondo","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-03"}]},{"name":"Thulani Mkhwanazi","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-18"}]},{"name":"Thuthukani Sibiya","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"}]},{"name":"Vellem Musarara","records":[{"comp":"12. Forklift Operator","cat":"Equipment Operation","expiry":"2026-11-28"}]},{"name":"Vincent Mabuyakhulu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2025-10-26"},{"comp":"15a. Portable Elec \u2013 Angle Grinder","cat":"Equipment Operation","expiry":null},{"comp":"15b. Portable Elec \u2013 Hilti DD120","cat":"Equipment Operation","expiry":null},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Warren Gibson","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-06-25"}]},{"name":"Wellington Mnyamana","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-02-27"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2027-09-30"}]},{"name":"Wesley Brahmadu","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-09-02"}]},{"name":"William Linda","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"3. Confined Spaces","cat":"Emergency Response","expiry":"2027-01-28"},{"comp":"6. First Aid","cat":"First Aid","expiry":"2026-11-18"},{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Wynand Burger","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-03-30"},{"comp":"8. HIRA","cat":"Risk Assessment","expiry":"2026-05-28"}]},{"name":"Zakhele Gumede","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2027-02-07"},{"comp":"2. MEWP / Cherry Picker","cat":"Equipment Operation","expiry":"2026-02-20"},{"comp":"9. Scaffolding \u2013 Erector","cat":"Equipment Operation","expiry":"2027-02-09"},{"comp":"9. Scaffolding \u2013 Inspector","cat":"Equipment Operation","expiry":"2027-02-08"}]},{"name":"Zamokwakhe Mseleku","records":[{"comp":"15c. Portable Elec \u2013 Hilti Drills","cat":"Equipment Operation","expiry":null}]},{"name":"Zandre Griffin","records":[{"comp":"1. Working At Heights","cat":"Equipment Operation","expiry":"2028-01-09"}]}],"competencies":[{"name":"1. Working At Heights","category":"Equipment Operation"},{"name":"8. HIRA","category":"Risk Assessment"},{"name":"10. Legal Liability","category":"Legal & Compliance"},{"name":"15c. Portable Elec \u2013 Hilti Drills","category":"Equipment Operation"},{"name":"13. Refrigeration & Trade Test","category":"Legal & Compliance"},{"name":"15a. Portable Elec \u2013 Angle Grinder","category":"Equipment Operation"},{"name":"15b. Portable Elec \u2013 Hilti DD120","category":"Equipment Operation"},{"name":"6. First Aid","category":"First Aid"},{"name":"11. Gas License","category":"Legal & Compliance"},{"name":"2. MEWP / Cherry Picker","category":"Equipment Operation"},{"name":"5. Fire Fighting \u2013 Basic","category":"Fire Safety"},{"name":"3. Confined Spaces","category":"Emergency Response"},{"name":"4. Fall Arrest Technician","category":"Equipment Operation"},{"name":"7. SHE Rep","category":"Legal & Compliance"},{"name":"12. Forklift Operator","category":"Equipment Operation"},{"name":"9. Scaffolding \u2013 Inspector","category":"Equipment Operation"},{"name":"9. Scaffolding \u2013 Erector","category":"Equipment Operation"}]};
-
 
 // ── SUPABASE ──────────────────────────────────────────────
 const SUPABASE_URL = 'https://bdozzouagbcyfxujtwhc.supabase.co';
@@ -1122,7 +1428,7 @@ let editingSiteId = null, currentSiteDetailId = null, editingInductionId = null;
 let pendingPhotoB64 = null, pendingDocFile = null;
 let showDismissed = false;
 
-const cache = { staff:[], departments:[], competencies:[], training:[], medicals:[], sites:[], inductions:[], documents:[] };
+const cache = { staff:[], departments:[], competencies:[], training:[], medicals:[], sites:[], inductions:[], documents:[], incidents:[], toolbox:[] };
 
 const COLORS = ['#7c6dff','#2dd4aa','#5ea6fc','#ff4f7b','#c97cfc','#fc8f3c','#f9c33a','#2dd4f0'];
 const DEPT_COLORS = { 'Sales':'#f9c33a','Management & Admin Staff':'#5ea6fc','Contracts':'#ff4f7b','Service':'#2dd4aa','Workshop & Warehouse':'#fc8f3c' };
@@ -1156,6 +1462,11 @@ function indStatus(exp){ if(!exp) return 'expired'; const d=daysUntil(exp); retu
 function setSelect(id,val){ const el=document.getElementById(id); if(!el) return; for(let i=0;i<el.options.length;i++) if(el.options[i].value===val||el.options[i].text===val){el.selectedIndex=i;break;} }
 function isAdmin(){ return currentUserRole==='admin'; }
 function canEdit(){ return ['admin','ohs_officer','hr'].includes(currentUserRole); }
+// v7: HTML-entity encoder — ALL user-entered free text rendered via innerHTML must pass through esc()
+function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// v7: per-view filter-tab state — persists the user's last selection across navigation
+const viewState = { staff:'all', training:'all', medicals:'all', incidents:'all' };
+function setActiveTab(viewId, f){ document.querySelectorAll('#'+viewId+' .filter-tab').forEach(b=>b.classList.toggle('active', (b.getAttribute('onclick')||'').includes("'"+f+"'"))); }
 
 // ── TOAST ─────────────────────────────────────────────────
 function showToast(msg,icon='✅'){
@@ -1233,7 +1544,9 @@ function updateSidebarPhoto(){
 
 // ── DATA LOADING ──────────────────────────────────────────
 async function loadAll(){
-  const [s,d,c,t,m,sites,inductions,docs] = await Promise.all([
+  // v7: incidents + toolbox_talks merged into the core load (formerly a v5 runtime
+  // patch) — one atomic Promise.all refresh keeps the cache internally consistent.
+  const [s,d,c,t,m,sites,inductions,docs,inc,tb] = await Promise.all([
     sb.from('staff').select('*, departments(name)').order('lname'),
     sb.from('departments').select('*').order('name'),
     sb.from('competencies').select('*').order('category'),
@@ -1241,7 +1554,9 @@ async function loadAll(){
     sb.from('medicals').select('*, staff(fname,lname,eid)').order('exam_date',{ascending:false}),
     sb.from('sites').select('*').order('name'),
     sb.from('site_inductions').select('*, staff(fname,lname,eid,dept_id), sites(name,induction_validity_months)').order('expiry_date'),
-    sb.from('staff_documents').select('*').order('created_at',{ascending:false})
+    sb.from('staff_documents').select('*').order('created_at',{ascending:false}),
+    sb.from('incidents').select('*').order('incident_datetime',{ascending:false}),
+    sb.from('toolbox_talks').select('*').order('talk_date',{ascending:false})
   ]);
   cache.staff=(s.data||[]).map(x=>({...x,dept_name:x.departments?.name||'—'}));
   cache.departments=d.data||[];
@@ -1251,6 +1566,9 @@ async function loadAll(){
   cache.sites=sites.data||[];
   cache.inductions=(inductions.data||[]).map(x=>({...x,fname:x.staff?.fname,lname:x.staff?.lname,eid:x.staff?.eid,dept_id:x.staff?.dept_id,site_name:x.sites?.name,site_validity:x.sites?.induction_validity_months}));
   cache.documents=docs.data||[];
+  cache.incidents=inc.data||[];
+  cache.toolbox=tb.data||[];
+  updateIncidentBadge();
 }
 
 // ── NAVIGATION ────────────────────────────────────────────
@@ -1262,12 +1580,13 @@ const VIEW_TITLES={
   admin:['Admin Panel','User & Data Management'],offboarding:['Staff Offboarding','Lifecycle'],
   incidents:['Incident & Hazard Register','OHS Register'],
   toolbox:['Toolbox Talk Log','Safety Briefings'],
-  reports:['Reports & Export','Analytics']
+  reports:['Reports & Export','Analytics'],
+  iso:['ISO 45001 Compliance','Clause-by-Clause Monitor']
 };
 const CTA_MAP={
   dashboard:'Add Staff',staff:'Add Staff',training:'Log Training',competencies:'Add Competency',
   medicals:'Log Medical',admin:'Add Staff',offboarding:null,departments:null,alerts:null,matrix:null,
-  sites:'Add Site',incidents:'Log Incident',toolbox:'Log Talk',reports:null
+  sites:'Add Site',incidents:'Log Incident',toolbox:'Log Talk',reports:null,iso:null
 };
 
 function switchView(v,el){
@@ -1294,11 +1613,18 @@ function handleCTA(){
 }
 
 function renderView(v){
+  // v7: filtered views re-render with their persisted filter (viewState) and
+  // re-sync the active tab, so navigating away no longer resets the user's selection.
   const fn={
-    dashboard:renderDashboard,staff:()=>renderStaff('all'),departments:renderDepts,
-    training:()=>renderTraining('all'),competencies:renderComps,medicals:()=>renderMedicals('all'),
+    dashboard:renderDashboard,
+    staff:()=>{setActiveTab('view-staff',viewState.staff);renderStaff(viewState.staff,_staffSearchQ);},
+    departments:renderDepts,
+    training:()=>{setActiveTab('view-training',viewState.training);renderTraining(viewState.training);},
+    competencies:renderComps,
+    medicals:()=>{setActiveTab('view-medicals',viewState.medicals);renderMedicals(viewState.medicals);},
     alerts:renderAlerts,sites:renderSites,matrix:renderMatrix,admin:renderAdmin,offboarding:renderOffboarding,
-    incidents:()=>renderIncidents('all'),toolbox:renderToolbox,reports:()=>{}
+    incidents:()=>{setActiveTab('view-incidents',viewState.incidents);renderIncidents(viewState.incidents);},
+    toolbox:renderToolbox,reports:()=>{},iso:renderISO
   }[v];
   if(fn) fn();
 }
@@ -1306,7 +1632,8 @@ function renderView(v){
 let _staffSearchQ='';
 function handleSearch(q){
   _staffSearchQ=q;
-  if(currentView==='staff') renderStaff(document.querySelector('#view-staff .filter-tab.active')?.textContent?.toLowerCase()||'all',q);
+  // v7: read the persisted filter instead of parsing tab label text (fragile)
+  if(currentView==='staff') renderStaff(viewState.staff,q);
 }
 
 
@@ -1372,7 +1699,7 @@ function renderStaff(filter,q=''){
     return`<tr onclick="openDetail(${s.id})"><td><div class="staff-cell">${avatarHtml}<div><div class="staff-name">${s.fname} ${s.lname}</div><div class="staff-id">${s.eid}</div></div></div></td><td>${s.dept_name}</td><td>${s.role}</td><td><span class="badge badge-blue">${s.emptype||'Full-time'}</span></td><td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)">${s.top_size||'—'} / ${s.pants_size||'—'}</td><td>${badge}</td><td onclick="event.stopPropagation()"><div class="actions-cell"><div class="icon-btn" onclick="openDetail(${s.id})" title="View">👁</div><div class="icon-btn" onclick="openEditStaff(${s.id})" title="Edit">✏️</div><div class="icon-btn warning" onclick="openOffboard(${s.id})" title="Offboard">🚪</div><div class="icon-btn danger" onclick="deleteStaff(${s.id},'${s.fname} ${s.lname}')" title="Delete">🗑</div></div></td></tr>`;
   }).join('');
 }
-function filterStaff(f,el){document.querySelectorAll('#view-staff .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderStaff(f,_staffSearchQ);}
+function filterStaff(f,el){viewState.staff=f;document.querySelectorAll('#view-staff .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderStaff(f,_staffSearchQ);}
 
 // ── DEPARTMENTS ───────────────────────────────────────────
 function renderDepts(){
@@ -1386,7 +1713,7 @@ function renderDepts(){
 }
 
 // ── TRAINING ──────────────────────────────────────────────
-function filterTraining(f,el){document.querySelectorAll('#view-training .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderTraining(f);}
+function filterTraining(f,el){viewState.training=f;document.querySelectorAll('#view-training .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderTraining(f);}
 function renderTraining(filter){
   let list=filter==='all'?cache.training:cache.training.filter(t=>tStatus(t.expiry_date)===filter);
   document.getElementById('training-count-lbl').textContent=`${list.length} record${list.length!==1?'s':''}`;
@@ -1409,7 +1736,7 @@ function renderComps(){
 }
 
 // ── MEDICALS ──────────────────────────────────────────────
-function filterMedicals(f,el){document.querySelectorAll('#view-medicals .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderMedicals(f);}
+function filterMedicals(f,el){viewState.medicals=f;document.querySelectorAll('#view-medicals .filter-tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');renderMedicals(f);}
 function renderMedicals(filter){
   const tbody=document.getElementById('med-tbody');
   const active=cache.staff.filter(s=>s.active);
@@ -2105,22 +2432,7 @@ function applyTheme(){
 // ── v5 ADDITIONS: INCIDENTS, TOOLBOX TALKS, REPORTS ────────
 // ═══════════════════════════════════════════════════════════
 
-// extend cache
-cache.incidents = [];
-cache.toolbox   = [];
-
-// ── PATCH loadAll to include new tables ──────────────────
-const _v4loadAll = loadAll;
-loadAll = async function() {
-  await _v4loadAll();
-  const [inc, tb] = await Promise.all([
-    sb.from('incidents').select('*').order('incident_datetime',{ascending:false}),
-    sb.from('toolbox_talks').select('*').order('talk_date',{ascending:false})
-  ]);
-  cache.incidents = inc.data || [];
-  cache.toolbox   = tb.data || [];
-  updateIncidentBadge();
-};
+// v7: loadAll patch removed — incidents/toolbox now load in the core loadAll() above.
 
 function updateIncidentBadge(){
   const open = cache.incidents.filter(i=>i.status==='Open').length;
@@ -2141,6 +2453,7 @@ const SEV_ORDER = { Critical:0, High:1, Medium:2, Low:3 };
 const STATUS_COLOR = { Open:'var(--red)', Investigating:'var(--yellow)', Closed:'var(--green)' };
 
 function filterIncidents(f, el){
+  viewState.incidents=f;
   document.querySelectorAll('#view-incidents .filter-tab').forEach(x=>x.classList.remove('active'));
   el.classList.add('active');
   renderIncidents(f);
@@ -2280,11 +2593,11 @@ function viewIncident(id){
     +'<div><div class="info-label">Date &amp; Time</div><div class="info-value">'+dt+'</div></div>'
     +'<div><div class="info-label">Location</div><div class="info-value">'+(inc.location||'--')+'</div></div>'
     +'<div><div class="info-label">Reported By</div><div class="info-value">'+(inc.reported_by_name||'--')+'</div></div>'
-    +'<div><div class="info-label">Witnesses</div><div class="info-value">'+(inc.witnesses||'--')+'</div></div></div>'
+    +'<div><div class="info-label">Witnesses</div><div class="info-value">'+esc(inc.witnesses||'--')+'</div></div></div>'
     +(involved.length?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Staff Involved</div><div style="display:flex;flex-wrap:wrap;gap:6px">'+involved.map(function(n){return '<span class="badge badge-purple">'+n+'</span>';}).join('')+'</div></div>':'')
-    +'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Description</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+(inc.description||'--')+'</div></div>'
-    +(inc.immediate_action?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Immediate Action Taken</div><div style="background:var(--green-bg);border:1px solid rgba(45,212,170,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+inc.immediate_action+'</div></div>':'')
-    +(inc.corrective_action?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Corrective Action</div><div style="background:var(--blue-bg);border:1px solid rgba(94,166,252,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+inc.corrective_action+'</div></div>':'')
+    +'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Description</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+esc(inc.description||'--')+'</div></div>'
+    +(inc.immediate_action?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Immediate Action Taken</div><div style="background:var(--green-bg);border:1px solid rgba(45,212,170,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+esc(inc.immediate_action)+'</div></div>':'')
+    +(inc.corrective_action?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Corrective Action</div><div style="background:var(--blue-bg);border:1px solid rgba(94,166,252,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7">'+esc(inc.corrective_action)+'</div></div>':'')
     +(inc.closure_date?'<div><div class="info-label">Closure Date</div><div class="info-value">'+fmt(inc.closure_date)+'</div></div>':'');
   openModal('modal-incident-view');
 }
@@ -2406,8 +2719,8 @@ function viewToolbox(id){
     +'<div><div class="info-label">Date</div><div class="info-value">'+fmt(tb.talk_date)+'</div></div>'
     +'<div><div class="info-label">Facilitator</div><div class="info-value">'+(tb.facilitator||'--')+'</div></div></div>'
     +(names.length?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:8px">Attendees ('+names.length+')</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+names.map(function(a){return '<div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-xs);padding:5px 10px;font-size:12px"><div class="avatar" style="background:'+a.bg+'20;color:'+a.bg+';width:22px;height:22px;font-size:9px">'+a.name.split(' ').map(function(w){return w[0];}).join('')+'</div>'+a.name+' <span style="color:var(--text-muted);font-family:\'IBM Plex Mono\',monospace;font-size:10px;margin-left:4px">'+a.eid+'</span></div>';}).join('')+'</div></div>':'<div style="color:var(--text-muted);font-size:12px;margin-bottom:14px">No attendees recorded</div>')
-    +(tb.key_points?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Key Points Discussed</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7;white-space:pre-wrap">'+tb.key_points+'</div></div>':'')
-    +(tb.actions_arising?'<div><div class="info-label" style="margin-bottom:6px">Actions Arising</div><div style="background:var(--yellow-bg);border:1px solid rgba(249,195,58,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7;white-space:pre-wrap">'+tb.actions_arising+'</div></div>':'');
+    +(tb.key_points?'<div style="margin-bottom:14px"><div class="info-label" style="margin-bottom:6px">Key Points Discussed</div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7;white-space:pre-wrap">'+esc(tb.key_points)+'</div></div>':'')
+    +(tb.actions_arising?'<div><div class="info-label" style="margin-bottom:6px">Actions Arising</div><div style="background:var(--yellow-bg);border:1px solid rgba(249,195,58,.2);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.7;white-space:pre-wrap">'+esc(tb.actions_arising)+'</div></div>':'');
   openModal('modal-toolbox-view');
 }
 
@@ -2579,132 +2892,369 @@ function exportReportCSV(){
 }
 
 
+// ═══════════════════════════════════════════════════════════════════
+// ── v7 ADDITIONS: ISO 45001 ENGINE + MONTHLY OHS REPORT ─────────────
+//
+// Design notes (see also the technical header at the top of this file):
+//  · computeISOMetrics() derives every indicator from the existing
+//    cache — no new tables, no extra data entry. "Compliance by
+//    construction": the operational record IS the audit evidence.
+//  · ISO_CLAUSES is declarative config: clause ref, title, the view
+//    that holds its evidence, and a metrics() builder returning
+//    {label, value, score} triples. Adding a clause = adding one entry.
+//  · Score bands: >=85 Conformant · 60–84 Partial · <60 Attention.
+//  · generateMonthlyReport() composes a multi-section management report
+//    (exec summary, KPI strip incl. LTIFR/TRIFR, incident analysis,
+//    consultation, training/medical/induction activity, look-ahead,
+//    month-over-month deltas) into the existing report modal so it
+//    inherits Print-to-PDF and CSV export for free.
+// ═══════════════════════════════════════════════════════════════════
 
-// ── TRAINING DATA IMPORT ─────────────────────────────────────────────────────
-async function runTrainingImport(){
-  const btn = document.getElementById('import-btn');
-  const status = document.getElementById('import-status');
-  const logEl = document.getElementById('import-log');
-  btn.disabled = true;
-  btn.textContent = '⏳ Importing…';
-  logEl.style.display = 'block';
-  logEl.innerHTML = '';
+// ── ISO 45001: METRIC DERIVATION ─────────────────────────────────────
+function computeISOMetrics(){
+  const active = cache.staff.filter(s=>s.active);
+  const N = active.length || 1;
+  const mandatory = cache.competencies.filter(c=>c.mandatory==='yes');
+  const now = new Date();
+  const d90 = new Date(now); d90.setDate(d90.getDate()-90);
+  const d365 = new Date(now); d365.setDate(d365.getDate()-365);
 
-  const log = (msg, color='var(--text-dim)') => {
-    logEl.innerHTML += `<div style="color:${color}">${msg}</div>`;
-    logEl.scrollTop = logEl.scrollHeight;
-  };
-
-  try {
-    setSyncing(true);
-    const payload = IMPORT_PAYLOAD;
-
-    // ── Step 1: Ensure all competencies exist ──
-    log('📋 Checking competencies…');
-    const { data: existingComps } = await sb.from('competencies').select('id,name');
-    const compMap = {};
-    (existingComps||[]).forEach(c => compMap[c.name.toLowerCase()] = c.id);
-
-    let compsCreated = 0;
-    for (const comp of payload.competencies) {
-      const key = comp.name.toLowerCase();
-      if (!compMap[key]) {
-        const { data: newComp, error } = await sb.from('competencies').insert({
-          name: comp.name,
-          category: comp.category,
-          validity_months: 12,
-          mandatory: 'role',
-          renewal_method: 'Re-examination'
-        }).select().single();
-        if (error) { log(`  ⚠ Could not create competency "${comp.name}": ${error.message}`, 'var(--yellow)'); continue; }
-        compMap[key] = newComp.id;
-        compsCreated++;
-        log(`  ✅ Created competency: ${comp.name}`, 'var(--green)');
-      } else {
-        log(`  — Competency exists: ${comp.name}`);
-      }
-    }
-    log(`Competencies: ${compsCreated} created, ${payload.competencies.length - compsCreated} already present.`);
-
-    // ── Step 2: Reload staff cache so we have fresh IDs ──
-    await loadAll();
-    log('👥 Matching staff names…');
-
-    // Build name-to-id map (case-insensitive, trim)
-    const staffMap = {};
-    cache.staff.forEach(s => {
-      const full = `${s.fname} ${s.lname}`.toLowerCase().trim();
-      staffMap[full] = s.id;
+  // 7.2 Competence — mandatory (staff × competency) pairs current
+  let pairCurrent=0, staffFull=0;
+  active.forEach(s=>{
+    let ok=0;
+    mandatory.forEach(c=>{
+      const r = cache.training.find(t=>t.staff_id===s.id && t.competency_id===c.id);
+      if(r && tStatus(r.expiry_date)==='current') ok++;
     });
+    pairCurrent += ok;
+    if(mandatory.length && ok===mandatory.length) staffFull++;
+  });
+  const pairTotal = mandatory.length * active.length;
+  const trainingRecordPct = pairTotal ? Math.round(pairCurrent/pairTotal*100) : 100;
+  const trainingStaffPct  = mandatory.length ? Math.round(staffFull/N*100) : 100;
+  const expiredTraining   = cache.training.filter(t=>tStatus(t.expiry_date)==='expired').length;
 
-    // ── Step 3: Insert training records ──
-    let inserted = 0, skippedName = 0, skippedComp = 0, skippedDup = 0;
-    const unmatched = new Set();
+  // 9.1 Health surveillance
+  const medCurrentN = active.filter(s=>cache.medicals.some(m=>m.staff_id===s.id && mStatus(m.expiry_date)==='current')).length;
+  const medicalPct  = Math.round(medCurrentN/N*100);
+  const noMed       = active.filter(s=>!cache.medicals.some(m=>m.staff_id===s.id)).length;
 
-    // Fetch existing training records to avoid duplicates
-    const { data: existingTr } = await sb.from('training_records').select('staff_id,competency_id');
-    const existingSet = new Set((existingTr||[]).map(r => `${r.staff_id}:${r.competency_id}`));
+  // 8.1 Operational control — induction currency
+  const indTotal   = cache.inductions.length;
+  const indCurrent = cache.inductions.filter(i=>indStatus(i.expiry_date)==='current').length;
+  const inductionPct = indTotal ? Math.round(indCurrent/indTotal*100) : null;
 
-    log('📝 Inserting training records…');
-    for (const person of payload.staff) {
-      const nameKey = person.name.toLowerCase().trim();
-      const staffId = staffMap[nameKey];
-      if (!staffId) {
-        skippedName++;
-        unmatched.add(person.name);
-        continue;
-      }
-      for (const rec of person.records) {
-        const compId = compMap[rec.comp.toLowerCase()];
-        if (!compId) { skippedComp++; continue; }
-        const dupKey = `${staffId}:${compId}`;
-        if (existingSet.has(dupKey)) { skippedDup++; continue; }
-        const { error } = await sb.from('training_records').insert({
-          staff_id: staffId,
-          competency_id: compId,
-          date_completed: rec.expiry ? (() => { const d = new Date(rec.expiry); d.setFullYear(d.getFullYear()-1); return d.toISOString().split('T')[0]; })() : '2025-01-01',
-          expiry_date: rec.expiry || null,
-          provider: 'GaucheAir Training Matrix',
-          notes: 'Imported from Staff Training Matrix 29 Apr 2026',
-          created_by: currentUser.id
-        });
-        if (error) { log(`  ⚠ ${person.name} / ${rec.comp}: ${error.message}`, 'var(--yellow)'); continue; }
-        existingSet.add(dupKey);
-        inserted++;
-      }
-    }
+  // 8.2 Emergency preparedness — current emergency-category competency coverage
+  const emgCats  = ['Fire Safety','First Aid','Emergency Response'];
+  const emgComps = cache.competencies.filter(c=>emgCats.includes(c.category)).map(c=>c.id);
+  const emgCovered = active.filter(s=>cache.training.some(t=>t.staff_id===s.id && emgComps.includes(t.competency_id) && tStatus(t.expiry_date)==='current')).length;
+  const emergencyPct = emgComps.length ? Math.round(emgCovered/N*100) : null;
 
-    await loadAll();
-    setSyncing(false);
+  // 5.4 / 7.3 Consultation & awareness — toolbox cadence, sign-off, reach
+  const talks90 = cache.toolbox.filter(t=>new Date(t.talk_date)>=d90);
+  const reached = new Set();
+  talks90.forEach(t=>{ try{ JSON.parse(t.attendees||'[]').forEach(id=>reached.add(id)); }catch(e){} });
+  const reachPct = Math.round(active.filter(s=>reached.has(s.id)).length/N*100);
+  const signOffRate = cache.toolbox.length ? Math.round(cache.toolbox.filter(t=>t.sign_off).length/cache.toolbox.length*100) : null;
 
-    // ── Summary ──
-    log('');
-    log('══ IMPORT COMPLETE ══════════════════════', 'var(--accent2)');
-    log(`  ✅ Records inserted:   ${inserted}`, 'var(--green)');
-    log(`  — Duplicates skipped: ${skippedDup}`);
-    log(`  ⚠ Names unmatched:   ${skippedName}`, skippedName > 0 ? 'var(--yellow)' : 'var(--text-dim)');
-    if (unmatched.size > 0) {
-      log('');
-      log('  Unmatched names (not in Staff Directory):', 'var(--yellow)');
-      [...unmatched].sort().forEach(n => log(`    · ${n}`, 'var(--yellow)'));
-    }
+  // 6.1.2 Hazard identification — proactive reporting & open-item ageing
+  const proactive90 = cache.incidents.filter(i=>['Near-Miss','Hazard Identified'].includes(i.incident_type) && new Date(i.incident_datetime)>=d90).length;
+  const openInc     = cache.incidents.filter(i=>i.status==='Open').length;
+  const openOver30  = cache.incidents.filter(i=>i.status==='Open' && (now-new Date(i.incident_datetime))/86400000>30).length;
 
-    status.textContent = `Done — ${inserted} records imported, ${skippedName} names unmatched`;
-    status.style.color = 'var(--green)';
-    btn.textContent = '✅ Import Complete';
-    showToast(`Import done — ${inserted} records added`, '📥');
-    renderAdmin();
+  // 10.2 Incident, nonconformity & corrective action (rolling 12 months)
+  const inc365   = cache.incidents.filter(i=>new Date(i.incident_datetime)>=d365);
+  const resolved = inc365.filter(i=>i.status!=='Open');
+  const closed   = inc365.filter(i=>i.status==='Closed');
+  const closurePct = inc365.length ? Math.round(resolved.length/inc365.length*100) : null;
+  const caPct      = closed.length ? Math.round(closed.filter(i=>(i.corrective_action||'').trim()).length/closed.length*100) : null;
 
-  } catch(e) {
-    setSyncing(false);
-    btn.disabled = false;
-    btn.textContent = '📥 Run Import';
-    status.textContent = 'Error: ' + e.message;
-    status.style.color = 'var(--red)';
-    log('❌ Fatal error: ' + e.message, 'var(--red)');
-    showToast(e.message, '❌');
-  }
+  // 7.5 Documented information
+  const docStaffPct = Math.round(active.filter(s=>cache.documents.some(d=>d.staff_id===s.id)).length/N*100);
+  const docCount    = cache.documents.length;
+
+  return { active, N:active.length, mandatoryN:mandatory.length,
+    trainingRecordPct, trainingStaffPct, expiredTraining,
+    medicalPct, noMed,
+    indTotal, indCurrent, inductionPct,
+    emergencyPct, emgCompsN:emgComps.length,
+    talks90:talks90.length, reachPct, signOffRate,
+    proactive90, openInc, openOver30,
+    inc365:inc365.length, closurePct, caPct,
+    docStaffPct, docCount };
 }
+
+// ── ISO 45001: DECLARATIVE CLAUSE CONFIG ─────────────────────────────
+const ISO_TARGET_TALKS_90D = 6;     // ≥ fortnightly consultation cadence
+const ISO_TARGET_PROACTIVE_90D = 3; // ≥ 1 near-miss/hazard report per month
+
+const ISO_CLAUSES = [
+  { ref:'5.4', icon:'🗣', view:'toolbox', title:'Consultation & Participation of Workers',
+    metrics:m=>[
+      {label:`Toolbox talks, rolling 90 days (target ≥${ISO_TARGET_TALKS_90D})`, value:m.talks90+' held', score:Math.min(100,Math.round(m.talks90/ISO_TARGET_TALKS_90D*100))},
+      {label:'Workforce reached in 90 days', value:m.reachPct+'%', score:m.reachPct},
+      {label:'Talks with attendee sign-off', value:m.signOffRate===null?'No data':m.signOffRate+'%', score:m.signOffRate}
+    ]},
+  { ref:'6.1.2', icon:'⚡', view:'incidents', title:'Hazard Identification & Risk Assessment',
+    metrics:m=>[
+      {label:`Near-miss / hazard reports, 90 days (target ≥${ISO_TARGET_PROACTIVE_90D})`, value:m.proactive90+' reported', score:Math.min(100,Math.round(m.proactive90/ISO_TARGET_PROACTIVE_90D*100))},
+      {label:'Open items older than 30 days', value:m.openOver30+' of '+m.openInc+' open', score:m.openInc?Math.max(0,Math.round((1-m.openOver30/m.openInc)*100)):100}
+    ]},
+  { ref:'7.2', icon:'🎓', view:'training', title:'Competence',
+    metrics:m=>[
+      {label:'Mandatory training records current', value:m.trainingRecordPct+'%', score:m.trainingRecordPct},
+      {label:'Staff with ALL mandatory training current', value:m.trainingStaffPct+'%', score:m.trainingStaffPct},
+      {label:'Expired training records', value:m.expiredTraining+' open gaps', score:Math.max(0,100-m.expiredTraining*2)}
+    ]},
+  { ref:'7.3', icon:'💡', view:'toolbox', title:'Awareness',
+    metrics:m=>[
+      {label:'Staff attending ≥1 briefing in 90 days', value:m.reachPct+'%', score:m.reachPct},
+      {label:'Understanding confirmed (sign-off rate)', value:m.signOffRate===null?'No data':m.signOffRate+'%', score:m.signOffRate}
+    ]},
+  { ref:'7.5', icon:'📎', view:'reports', title:'Documented Information',
+    metrics:m=>[
+      {label:'Staff with evidence documents on file', value:m.docStaffPct+'%', score:m.docStaffPct},
+      {label:'Controlled documents in vault', value:m.docCount+' files', score:Math.min(100,Math.round(m.docCount/m.N*100))}
+    ]},
+  { ref:'8.1', icon:'🏗', view:'sites', title:'Operational Planning & Control',
+    metrics:m=>[
+      {label:'Site inductions current', value:m.inductionPct===null?'No inductions logged':m.inductionPct+'% ('+m.indCurrent+'/'+m.indTotal+')', score:m.inductionPct}
+    ]},
+  { ref:'8.2', icon:'🚒', view:'matrix', title:'Emergency Preparedness & Response',
+    metrics:m=>[
+      {label:'Staff holding current emergency competency (Fire / First Aid / Emergency Response)', value:m.emergencyPct===null?'No emergency competencies defined':m.emergencyPct+'%', score:m.emergencyPct}
+    ]},
+  { ref:'9.1', icon:'📊', view:'medicals', title:'Monitoring, Measurement, Analysis & Evaluation',
+    metrics:m=>[
+      {label:'Active staff with current medical surveillance', value:m.medicalPct+'%', score:m.medicalPct},
+      {label:'Staff with no medical on record', value:m.noMed+' staff', score:Math.max(0,Math.round((1-m.noMed/m.N)*100))}
+    ]},
+  { ref:'10.2', icon:'⚠️', view:'incidents', title:'Incident, Nonconformity & Corrective Action',
+    metrics:m=>[
+      {label:'Incidents progressed past "Open" (12 months)', value:m.closurePct===null?'No incidents — n/a':m.closurePct+'%', score:m.closurePct},
+      {label:'Closed incidents with corrective action recorded', value:m.caPct===null?'No closures yet':m.caPct+'%', score:m.caPct}
+    ]}
+];
+
+function isoBand(score){
+  if(score===null) return {label:'No data', color:'var(--text-muted)', badge:'badge-blue'};
+  if(score>=85) return {label:'Conformant', color:'var(--green)', badge:'badge-green'};
+  if(score>=60) return {label:'Partial', color:'var(--yellow)', badge:'badge-yellow'};
+  return {label:'Attention', color:'var(--red)', badge:'badge-red'};
+}
+
+function computeISOScores(){
+  const m = computeISOMetrics();
+  const clauses = ISO_CLAUSES.map(c=>{
+    const metrics = c.metrics(m);
+    const scored = metrics.filter(x=>x.score!==null && x.score!==undefined && !isNaN(x.score));
+    const score = scored.length ? Math.round(scored.reduce((a,x)=>a+x.score,0)/scored.length) : null;
+    return {...c, metrics, score};
+  });
+  const withData = clauses.filter(c=>c.score!==null);
+  const overall = withData.length ? Math.round(withData.reduce((a,c)=>a+c.score,0)/withData.length) : null;
+  return {metrics:m, clauses, overall};
+}
+
+// Programmatic navigation that keeps the sidebar nav state in sync.
+function navTo(v){
+  const el=[...document.querySelectorAll('.nav-item')].find(n=>(n.getAttribute('onclick')||'').includes("'"+v+"'"));
+  switchView(v, el||null);
+}
+
+// ── ISO 45001: RENDER ────────────────────────────────────────────────
+function renderISO(){
+  const {metrics:m, clauses, overall} = computeISOScores();
+  const band = isoBand(overall);
+  document.getElementById('iso-updated-lbl').textContent='Computed live · '+new Date().toLocaleString('en-ZA',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  // Gauge
+  const pct = overall===null?0:overall;
+  document.getElementById('iso-gauge').style.background = `conic-gradient(${band.color} ${pct*3.6}deg, var(--surface3) 0deg)`;
+  document.getElementById('iso-gauge-val').textContent = overall===null?'—':overall+'%';
+  document.getElementById('iso-gauge-val').style.color = band.color;
+  document.getElementById('iso-overall-badge').innerHTML = `<span class="badge ${band.badge}"><span class="badge-dot"></span>${band.label}</span>`;
+  // Status summary
+  const cConf = clauses.filter(c=>isoBand(c.score).label==='Conformant').length;
+  const cPart = clauses.filter(c=>isoBand(c.score).label==='Partial').length;
+  const cAttn = clauses.filter(c=>isoBand(c.score).label==='Attention').length;
+  document.getElementById('iso-status-row').innerHTML =
+    `<span class="badge badge-green">${cConf} Conformant</span>`+
+    `<span class="badge badge-yellow">${cPart} Partial</span>`+
+    `<span class="badge badge-red">${cAttn} Attention</span>`+
+    `<span class="badge badge-blue">${clauses.length} clauses monitored</span>`;
+  // KPI chips
+  const chips = [
+    {lbl:'Training current', val:m.trainingRecordPct+'%', col: m.trainingRecordPct>=85?'var(--green)':m.trainingRecordPct>=60?'var(--yellow)':'var(--red)'},
+    {lbl:'Medical surveillance', val:m.medicalPct+'%', col: m.medicalPct>=85?'var(--green)':m.medicalPct>=60?'var(--yellow)':'var(--red)'},
+    {lbl:'Inductions current', val:m.inductionPct===null?'—':m.inductionPct+'%', col:'var(--blue)'},
+    {lbl:'Open incidents', val:m.openInc, col:m.openInc===0?'var(--green)':'var(--red)'}
+  ];
+  document.getElementById('iso-chip-grid').innerHTML = chips.map(c=>
+    `<div class="kpi-chip"><div class="kpi-chip-val" style="color:${c.col}">${c.val}</div><div class="kpi-chip-lbl">${c.lbl}</div></div>`).join('');
+  // Clause cards
+  document.getElementById('iso-grid').innerHTML = clauses.map(c=>{
+    const b = isoBand(c.score);
+    return `<div class="iso-clause-card" style="--clause-color:${b.color}">
+      <div class="iso-clause-head"><span class="iso-clause-ref">${c.icon} ${c.ref}</span><div class="iso-clause-title">${c.title}</div><div class="iso-clause-score">${c.score===null?'—':c.score}</div></div>
+      <div class="iso-bar"><div class="iso-bar-fill" style="width:${c.score===null?0:c.score}%"></div></div>
+      ${c.metrics.map(x=>`<div class="iso-metric"><span>${x.label}</span><b>${x.value}</b></div>`).join('')}
+      <div class="iso-evidence-btn" onclick="navTo('${c.view}')">View evidence →</div>
+    </div>`;
+  }).join('');
+}
+
+// ── MONTHLY OHS REPORT ───────────────────────────────────────────────
+const MR_HOURS_PER_STAFF = 195; // 45 h-week × 4.33 weeks — documented assumption
+
+function openMonthlyReport(){
+  const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); // default: previous month
+  document.getElementById('mr-month').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  document.getElementById('mr-hours').value = cache.staff.filter(s=>s.active).length*MR_HOURS_PER_STAFF;
+  openModal('modal-monthly');
+}
+
+function mrFmtRate(x){ return x===null?'—':(Math.round(x*100)/100).toFixed(2); }
+function mrDelta(cur, prev, invert){
+  const d = cur-prev;
+  if(d===0) return '<span class="mr-delta flat">± 0 vs prior month</span>';
+  const good = invert ? d<0 : d>0;
+  return `<span class="mr-delta ${good?'good':'bad'}">${d>0?'+':''}${d} vs prior month</span>`;
+}
+function mrTable(headers, rowsHtml){
+  return `<div class="report-table-wrap"><table class="report-table"><thead><tr>${headers.map(h=>'<th>'+h+'</th>').join('')}</tr></thead><tbody>${rowsHtml||'<tr><td colspan="'+headers.length+'" style="text-align:center;padding:24px;color:var(--text-muted)">No records for this period</td></tr>'}</tbody></table></div>`;
+}
+
+function generateMonthlyReport(){
+  const mv = document.getElementById('mr-month').value;
+  if(!mv){ showToast('Select a reporting month','⚠️'); return; }
+  const hours = parseFloat(document.getElementById('mr-hours').value)||0;
+  closeModal('modal-monthly');
+
+  const [y,mo] = mv.split('-').map(Number);
+  const start=new Date(y,mo-1,1), end=new Date(y,mo,1);
+  const pStart=new Date(y,mo-2,1);
+  const nEnd=new Date(y,mo+1,1);
+  const label = start.toLocaleDateString('en-ZA',{month:'long',year:'numeric'});
+  const inRange=(d,a,b)=>{ if(!d) return false; const x=new Date(d); return x>=a&&x<b; };
+
+  // ── Incident analysis ──
+  const incs     = cache.incidents.filter(i=>inRange(i.incident_datetime,start,end));
+  const prevIncs = cache.incidents.filter(i=>inRange(i.incident_datetime,pStart,start));
+  const injuries = incs.filter(i=>i.incident_type==='Injury');
+  const lti      = injuries.filter(i=>['Critical','High'].includes(i.severity)).length;
+  const nearMiss = incs.filter(i=>i.incident_type==='Near-Miss').length;
+  const hazards  = incs.filter(i=>i.incident_type==='Hazard Identified').length;
+  const ltifr    = hours>0 ? lti*1000000/hours : null;
+  const trifr    = hours>0 ? injuries.length*1000000/hours : null;
+  const nmRatio  = injuries.length ? (nearMiss/injuries.length).toFixed(1)+' : 1' : (nearMiss>0?nearMiss+' : 0':'—');
+
+  // ── Consultation / training / health / access activity ──
+  const talks     = cache.toolbox.filter(t=>inRange(t.talk_date,start,end));
+  const prevTalks = cache.toolbox.filter(t=>inRange(t.talk_date,pStart,start));
+  const active    = cache.staff.filter(s=>s.active);
+  const reached   = new Set();
+  let attendanceTotal=0;
+  talks.forEach(t=>{ try{ const a=JSON.parse(t.attendees||'[]'); attendanceTotal+=a.length; a.forEach(id=>reached.add(id)); }catch(e){} });
+  const reachPct  = active.length?Math.round(active.filter(s=>reached.has(s.id)).length/active.length*100):0;
+  const trainings = cache.training.filter(t=>inRange(t.date_completed,start,end));
+  const prevTrain = cache.training.filter(t=>inRange(t.date_completed,pStart,start));
+  const meds      = cache.medicals.filter(m=>inRange(m.exam_date,start,end));
+  const inds      = cache.inductions.filter(i=>inRange(i.inducted_date,start,end));
+
+  // ── Look-ahead: expiring in the following calendar month ──
+  const expTrain = cache.training.filter(t=>inRange(t.expiry_date,end,nEnd));
+  const expMed   = cache.medicals.filter(m=>inRange(m.expiry_date,end,nEnd));
+  const expInd   = cache.inductions.filter(i=>inRange(i.expiry_date,end,nEnd));
+
+  // ── Compliance posture as of today (ISO engine) ──
+  const iso = computeISOScores();
+  const m = iso.metrics;
+  const band = isoBand(iso.overall);
+
+  // ── Executive summary (auto-composed) ──
+  const summary =
+    `During <strong>${label}</strong>, GaucheAir recorded <strong>${incs.length}</strong> incident register ${incs.length===1?'entry':'entries'} `+
+    `(${injuries.length} ${injuries.length===1?'injury':'injuries'}, ${nearMiss} near-miss${nearMiss===1?'':'es'}, ${hazards} hazard${hazards===1?'':'s'} identified) `+
+    `against <strong>${hours.toLocaleString('en-ZA')}</strong> man-hours, yielding an LTIFR of <strong>${mrFmtRate(ltifr)}</strong> and TRIFR of <strong>${mrFmtRate(trifr)}</strong> per 1,000,000 hours. `+
+    `<strong>${talks.length}</strong> toolbox talk${talks.length===1?'':'s'} reached <strong>${reachPct}%</strong> of the active workforce, `+
+    `<strong>${trainings.length}</strong> training record${trainings.length===1?'':'s'} and <strong>${meds.length}</strong> medical examination${meds.length===1?'':'s'} were completed, and <strong>${inds.length}</strong> site induction${inds.length===1?'':'s'} logged. `+
+    `Current ISO 45001 self-assessment stands at <strong style="color:${band.color}">${iso.overall===null?'—':iso.overall+'%'} (${band.label})</strong>. `+
+    `Looking ahead, <strong>${expTrain.length+expMed.length+expInd.length}</strong> certification${(expTrain.length+expMed.length+expInd.length)===1?'':'s'} fall due next month and should be scheduled for renewal now.`;
+
+  // ── KPI strip ──
+  const kpis = [
+    {lbl:'Man-hours (basis)', val:hours?hours.toLocaleString('en-ZA'):'—', sub:'editable estimate'},
+    {lbl:'LTIFR', val:mrFmtRate(ltifr), sub:'per 1,000,000 h', col: lti===0?'var(--green)':'var(--red)'},
+    {lbl:'TRIFR', val:mrFmtRate(trifr), sub:'per 1,000,000 h', col: injuries.length===0?'var(--green)':'var(--yellow)'},
+    {lbl:'Near-miss ratio', val:nmRatio, sub:'leading indicator'},
+    {lbl:'Incidents logged', val:incs.length, sub:'', delta:mrDelta(incs.length,prevIncs.length,true)},
+    {lbl:'Toolbox talks', val:talks.length, sub:attendanceTotal+' attendances', delta:mrDelta(talks.length,prevTalks.length,false)},
+    {lbl:'Training completed', val:trainings.length, sub:'', delta:mrDelta(trainings.length,prevTrain.length,false)},
+    {lbl:'ISO 45001 score', val:iso.overall===null?'—':iso.overall+'%', sub:band.label, col:band.color}
+  ];
+
+  // ── CSV dataset ──
+  _reportData = [['Section','Item','Detail','Value']];
+  _reportData.push(['KPI','Reporting month','',label]);
+  _reportData.push(['KPI','Man-hours basis','',hours]);
+  _reportData.push(['KPI','LTIFR','LTI x 1,000,000 / man-hours',mrFmtRate(ltifr)]);
+  _reportData.push(['KPI','TRIFR','Recordable injuries x 1,000,000 / man-hours',mrFmtRate(trifr)]);
+  _reportData.push(['KPI','Near-miss ratio','',nmRatio]);
+  _reportData.push(['KPI','ISO 45001 self-assessment','',iso.overall===null?'—':iso.overall+'%']);
+  incs.forEach(i=>_reportData.push(['Incidents',i.incident_type,(i.location||'')+' · '+(i.severity||''),i.status]));
+  talks.forEach(t=>{ let n=0; try{n=JSON.parse(t.attendees||'[]').length;}catch(e){} _reportData.push(['Toolbox Talks',t.topic,fmt(t.talk_date),n+' attendees']); });
+  trainings.forEach(t=>_reportData.push(['Training Completed',t.fname+' '+t.lname,t.competency_name||'',fmt(t.date_completed)]));
+  meds.forEach(x=>_reportData.push(['Medicals',x.fname+' '+x.lname,x.exam_type,OUTCOME_LABEL[x.outcome]||x.outcome]));
+  inds.forEach(i=>_reportData.push(['Inductions',i.fname+' '+i.lname,i.site_name||'',fmt(i.inducted_date)]));
+  expTrain.forEach(t=>_reportData.push(['Expiring Next Month',t.fname+' '+t.lname,'Training: '+(t.competency_name||''),fmt(t.expiry_date)]));
+  expMed.forEach(x=>_reportData.push(['Expiring Next Month',x.fname+' '+x.lname,'Medical: '+x.exam_type,fmt(x.expiry_date)]));
+  expInd.forEach(i=>_reportData.push(['Expiring Next Month',i.fname+' '+i.lname,'Induction: '+(i.site_name||''),fmt(i.expiry_date)]));
+  iso.clauses.forEach(c=>_reportData.push(['ISO 45001 Clauses',c.ref+' '+c.title,'',c.score===null?'No data':c.score+'%']));
+
+  // ── Detail tables ──
+  const sevBadge = s=>'<span class="badge '+(SEV_BADGE[s]||'badge-blue')+'">'+s+'</span>';
+  const incRows = incs.map(i=>'<tr><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+(i.incident_datetime?new Date(i.incident_datetime).toLocaleDateString('en-ZA'):'—')+'</td><td>'+esc(i.incident_type)+'</td><td>'+sevBadge(i.severity)+'</td><td style="font-size:12px;color:var(--text-dim)">'+esc(i.location||'—')+'</td><td>'+esc(i.status)+'</td><td style="font-size:11px;color:var(--text-dim);max-width:240px">'+esc((i.description||'').slice(0,90))+'</td></tr>').join('');
+  const talkRows = talks.map(t=>{ let n=0; try{n=JSON.parse(t.attendees||'[]').length;}catch(e){} return '<tr><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(t.talk_date)+'</td><td style="font-weight:600">'+esc(t.topic)+'</td><td>'+esc(t.category||'—')+'</td><td>'+esc(t.facilitator||'—')+'</td><td>'+n+'</td><td>'+(t.sign_off?'<span class="badge badge-green">✓</span>':'<span class="badge badge-yellow">—</span>')+'</td></tr>'; }).join('');
+  const trainRows = trainings.map(t=>'<tr><td>'+esc((t.fname||'')+' '+(t.lname||''))+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+esc(t.eid||'')+'</td><td>'+esc(t.competency_name||'—')+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(t.date_completed)+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+(t.expiry_date?fmt(t.expiry_date):'—')+'</td><td>'+esc(t.provider||'—')+'</td></tr>').join('');
+  const medRows = meds.map(x=>'<tr><td>'+esc((x.fname||'')+' '+(x.lname||''))+'</td><td>'+esc(x.exam_type)+'</td><td><span class="badge '+(OUTCOME_BADGE[x.outcome]||'badge-blue')+'">'+(OUTCOME_LABEL[x.outcome]||esc(x.outcome))+'</span></td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(x.exam_date)+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(x.expiry_date)+'</td></tr>').join('');
+  const indRows = inds.map(i=>'<tr><td>'+esc((i.fname||'')+' '+(i.lname||''))+'</td><td>'+esc(i.site_name||'—')+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(i.inducted_date)+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(i.expiry_date)+'</td></tr>').join('');
+  const expRows = [
+    ...expTrain.map(t=>['Training',(t.fname||'')+' '+(t.lname||''),t.eid||'',t.competency_name||'—',t.expiry_date]),
+    ...expMed.map(x=>['Medical',(x.fname||'')+' '+(x.lname||''),x.eid||'',x.exam_type,x.expiry_date]),
+    ...expInd.map(i=>['Induction',(i.fname||'')+' '+(i.lname||''),i.eid||'',i.site_name||'—',i.expiry_date])
+  ].sort((a,b)=>new Date(a[4])-new Date(b[4]))
+   .map(r=>'<tr><td><span class="badge badge-blue">'+r[0]+'</span></td><td>'+esc(r[1])+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+esc(r[2])+'</td><td>'+esc(r[3])+'</td><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+fmt(r[4])+'</td></tr>').join('');
+  const isoRows = iso.clauses.map(c=>{ const b=isoBand(c.score); return '<tr><td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px">'+c.ref+'</td><td>'+c.title+'</td><td><strong style="color:'+b.color+'">'+(c.score===null?'—':c.score+'%')+'</strong></td><td><span class="badge '+b.badge+'">'+b.label+'</span></td></tr>'; }).join('');
+
+  const html =
+    `<div class="mr-exec"><strong style="display:block;margin-bottom:6px;font-size:13px">Executive Summary — ${label}</strong>${summary}</div>`+
+    `<div class="mr-kpis">${kpis.map(k=>`<div class="mr-kpi"><div class="mr-kpi-val" style="color:${k.col||'var(--text)'}">${k.val}</div><div class="mr-kpi-lbl">${k.lbl}</div><div class="mr-kpi-sub">${k.sub||''}${k.delta||''}</div></div>`).join('')}</div>`+
+    `<div class="mr-section-title">⚠️ Incident Register — ${label} (${incs.length})</div>`+mrTable(['Date','Type','Severity','Location','Status','Description'],incRows)+
+    `<div class="mr-section-title">🗣 Worker Consultation — Toolbox Talks (${talks.length})</div>`+mrTable(['Date','Topic','Category','Facilitator','Attendees','Sign-off'],talkRows)+
+    `<div class="mr-section-title">🎓 Training Completed (${trainings.length})</div>`+mrTable(['Staff Member','EID','Competency','Completed','Expires','Provider'],trainRows)+
+    `<div class="mr-section-title">🏥 Medical Examinations (${meds.length})</div>`+mrTable(['Staff Member','Exam Type','Outcome','Exam Date','Review Date'],medRows)+
+    `<div class="mr-section-title">🏗 Site Inductions Logged (${inds.length})</div>`+mrTable(['Staff Member','Site','Inducted','Expires'],indRows)+
+    `<div class="mr-section-title">⏳ Look-Ahead — Certifications Due Next Month (${expTrain.length+expMed.length+expInd.length})</div>`+mrTable(['Type','Staff Member','EID','Item','Expires'],expRows)+
+    `<div class="mr-section-title">📐 ISO 45001 Clause Self-Assessment (as at report generation)</div>`+mrTable(['Clause','Requirement','Score','Status'],isoRows)+
+    `<div class="mr-note"><strong>Basis of preparation.</strong> LTIFR = lost-time injuries × 1,000,000 ÷ man-hours; TRIFR = recordable injuries × 1,000,000 ÷ man-hours. "Recordable injury" = register entries of type Injury; "lost-time injury" = Injury entries of Critical or High severity (proxy pending a dedicated lost-days field). Man-hours basis: ${hours.toLocaleString('en-ZA')} (default estimate = active headcount × ${MR_HOURS_PER_STAFF} h/month; substitute payroll actuals where available). ISO clause scores are a live management self-assessment computed from system records — methodology documented in the ISO 45001 Monitor and the technical header of this application. Generated by SafeStaff OHS v7 for GaucheAir Air Conditioning Services.</div>`;
+
+  renderCompositeReport('Monthly OHS Report — '+label, html);
+}
+
+// Composite (multi-section) report renderer — shares the report modal so
+// Print-to-PDF and CSV export work identically to tabular reports.
+function renderCompositeReport(title, html){
+  const dateStr=new Date().toLocaleDateString('en-ZA',{day:'2-digit',month:'long',year:'numeric'});
+  _reportTitle=title;
+  document.getElementById('report-modal-title').textContent=title;
+  document.getElementById('report-modal-sub').textContent='Generated: '+dateStr;
+  document.getElementById('print-report-title').textContent=title;
+  document.getElementById('print-report-date').textContent='Generated: '+dateStr;
+  document.getElementById('report-content').innerHTML=html;
+  openModal('modal-report');
+}
+
 
 // ── INIT ──────────────────────────────────────────────────
 (async()=>{
